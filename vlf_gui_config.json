@@ -1,0 +1,14 @@
+{
+  "profiles": [
+    {
+      "name": "test",
+      "url": "https://example.com/sub",
+      "ptype": "VLESS",
+      "address": "",
+      "remark": ""
+    }
+  ],
+  "ru_mode": false,
+  "site_exclusions": [],
+  "app_exclusions": []
+}

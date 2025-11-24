@@ -84,10 +84,8 @@ class VlfCore {
   void addProfile(Profile p) {
     profileManager.add(p);
     _saveAll();
-    // if no current profile selected, set to newly added
-    if (currentProfileIndex.value == null) {
-      currentProfileIndex.value = profileManager.profiles.length - 1;
-    }
+    // Make newly added profile the current selection.
+    currentProfileIndex.value = profileManager.profiles.length - 1;
   }
 
   Profile? getCurrentProfile() {

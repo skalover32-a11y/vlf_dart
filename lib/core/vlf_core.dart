@@ -276,6 +276,11 @@ class VlfCore {
   Future<void> writeConfigForCurrentProfile() async {
     final idx = currentProfileIndex.value;
     if (idx == null) throw Exception('No profile selected');
+    await writeConfigForProfileIndex(idx);
+  }
+
+  /// Generate and write `config.json` and `config_debug.json` for a specific profile index.
+  Future<void> writeConfigForProfileIndex(int idx) async {
     if (idx < 0 || idx >= profileManager.profiles.length) throw Exception('Profile index out of range');
     final p = profileManager.profiles[idx];
 
@@ -299,6 +304,25 @@ class VlfCore {
       logger.append('config_debug.json записан для проверки.\n');
     } catch (e) {
       logger.append('Ошибка при записи config.json: $e\n');
+      rethrow;
+    }
+  }
+
+  /// Ensure config for profile exists and open it in the platform default editor.
+  Future<void> openConfigForProfileIndex(int idx) async {
+    await writeConfigForProfileIndex(idx);
+    final cfgPath = File('${configStore.baseDir.path}${Platform.pathSeparator}config.json');
+    try {
+      if (Platform.isWindows) {
+        await Process.start('notepad.exe', [cfgPath.path]);
+      } else if (Platform.isMacOS) {
+        await Process.start('open', [cfgPath.path]);
+      } else {
+        await Process.start('xdg-open', [cfgPath.path]);
+      }
+      logger.append('Открыл config.json для профиля ${profileManager.profiles[idx].name}\n');
+    } catch (e) {
+      logger.append('Не удалось открыть редактор: $e\n');
       rethrow;
     }
   }

@@ -128,14 +128,20 @@ class AppWindowWrapper extends StatelessWidget {
 
         // Reduce external safe area padding slightly so the UI is denser.
         final mq = MediaQuery.of(context);
+        // Make top/bottom safe area minimal (0) so UI fills window vertically.
         final adjusted = mq.copyWith(
           padding: EdgeInsets.only(
             left: mq.padding.left,
             right: mq.padding.right,
-            top: mq.padding.top > 4 ? 4 : mq.padding.top,
-            bottom: mq.padding.bottom > 4 ? 4 : mq.padding.bottom,
+            top: 0,
+            bottom: 0,
           ),
         );
+
+        // Make the scaled child occupy full available height by setting its
+        // unscaled height to constraints.maxHeight/scale. This reduces the
+        // top/bottom gaps around the mobile card without changing internal widgets.
+        final double childHeight = (constraints.maxHeight / (scale <= 0 ? 1.0 : scale)).clamp(0.0, double.infinity);
 
         return MediaQuery(
           data: adjusted,
@@ -145,6 +151,7 @@ class AppWindowWrapper extends StatelessWidget {
               alignment: Alignment.topCenter,
               child: SizedBox(
                 width: 430,
+                height: childHeight,
                 child: child,
               ),
             ),

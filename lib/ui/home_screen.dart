@@ -294,19 +294,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     maxHeight: cardMaxHeight,
                   ),
                   child: Align(
-                    alignment: Alignment.topCenter,
+                    alignment: Alignment.center,
                     child: FittedBox(
                       fit: BoxFit.scaleDown,
-                      alignment: Alignment.topCenter,
+                      alignment: Alignment.center,
                       child: ConstrainedBox(
                         constraints: BoxConstraints(maxWidth: designWidth),
                         child: SizedBox(
                           width: designWidth,
+                          height: 880.0,
                           child: Container(
-                            // allow height to expand up to the parent's maxHeight so UI stretches vertically
-                            constraints: BoxConstraints(
-                              maxHeight: cardMaxHeight,
-                            ),
+                            // fixed design height above; remove maxHeight constraint
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 20,

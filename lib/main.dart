@@ -29,6 +29,10 @@ Future<void> main() async {
         await windowManager.setTitle('VLF tunnel');
         await windowManager.setSize(startSize);
         await windowManager.setMinimumSize(minSize);
+        // Prevent the window from being resized/larger than the start size.
+        // This disables user resizing (so the UI won't stretch unexpectedly).
+        await windowManager.setMaximumSize(startSize);
+        await windowManager.setResizable(false);
         await windowManager.show();
         await windowManager.focus();
       });
@@ -148,7 +152,7 @@ class AppWindowWrapper extends StatelessWidget {
           child: Center(
             child: Transform.scale(
               scale: scale,
-              alignment: Alignment.topCenter,
+              alignment: Alignment.center,
               child: SizedBox(
                 width: 430,
                 height: childHeight,

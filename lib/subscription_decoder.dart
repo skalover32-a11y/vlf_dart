@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -34,9 +35,18 @@ Future<String> extractVlessFromAny(String raw) async {
   // 2) если это HTTP/HTTPS URL — скачиваем и повторяем попытку на теле ответа
   final lower = s.toLowerCase();
   if (lower.startsWith('http://') || lower.startsWith('https://')) {
+    // network fetch: increase timeout and retry once on timeout to avoid
+    // spurious failures on slow connections.
+    final timeoutDuration = const Duration(seconds: 20);
     try {
       final uri = Uri.parse(s);
-      final resp = await http.get(uri).timeout(const Duration(seconds: 8));
+      http.Response resp;
+      try {
+        resp = await http.get(uri).timeout(timeoutDuration);
+      } on TimeoutException {
+        // first attempt timed out — try once more with a longer timeout
+        resp = await http.get(uri).timeout(timeoutDuration * 2);
+      }
       if (resp.statusCode != 200) {
         throw Exception('HTTP ${resp.statusCode} при получении подписки');
       }

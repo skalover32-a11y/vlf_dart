@@ -600,14 +600,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                             );
                                           },
                                         ),
-                                        PopoverMenuItem(
-                                          icon: Icons.file_upload,
-                                          text: 'Импорт профилей',
-                                          onTap: () {
-                                            setState(() => _isMainMenuOpen = false);
-                                            _handleImportProfiles();
-                                          },
-                                        ),
+                                        // Import moved to '+' menu to avoid duplication
                                         PopoverMenuItem(
                                           icon: Icons.list_alt,
                                           text: 'Логи',
@@ -653,6 +646,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                           text: 'Добавить через QR код',
                                           onTap: () {
                                             _handleAddByQr();
+                                          },
+                                        ),
+                                        PopoverMenuItem(
+                                          icon: Icons.file_upload,
+                                          text: 'Импорт профилей (файл)',
+                                          onTap: () {
+                                            _handleImportProfiles();
                                           },
                                         ),
                                       ],

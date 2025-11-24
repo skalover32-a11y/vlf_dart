@@ -67,6 +67,27 @@ Future<String> extractVlessFromAny(String raw) async {
     } on FormatException catch (e) {
       throw Exception('Неверный URL: $e');
     } on SocketException catch (e) {
+      // Network/DNS error — before failing, try to salvage possible encoded
+      // subscription embedded in the URL (path/query) or treat the raw text
+      // as base64 candidate.
+      // 1) try decode path and query components
+      try {
+        final uri = Uri.parse(s);
+        final parts = <String>[];
+        parts.addAll(uri.pathSegments);
+        if (uri.query.isNotEmpty) parts.add(uri.query);
+        final joined = parts.join('\n');
+        final fromParts = _findFirstVless(joined);
+        if (fromParts != null) return fromParts;
+        // try to decode base64-like substrings from joined
+        final fromChunks = _tryDecodeBase64Chunks(joined);
+        if (fromChunks != null) return fromChunks;
+      } catch (_) {}
+      // 2) try to find base64 substring in the original raw text
+      try {
+        final fromChunks = _tryDecodeBase64Chunks(s);
+        if (fromChunks != null) return fromChunks;
+      } catch (_) {}
       throw Exception('Сетевая ошибка при получении подписки: $e');
     }
   }
@@ -84,6 +105,26 @@ Future<String> extractVlessFromAny(String raw) async {
       'Не удалось распарсить подписку: невалидный base64 или отсутствует vless://',
     );
   }
+}
+
+/// Try to find long base64-like substrings inside `text`, decode them and
+/// search for a vless:// link inside decoded text. Returns first found vless
+/// or null.
+String? _tryDecodeBase64Chunks(String text) {
+  // find sequences of base64 chars (A-Za-z0-9+/=) of reasonable length
+  final matches = RegExp(r'[A-Za-z0-9+/=]{40,}').allMatches(text);
+  for (final m in matches) {
+    final chunk = m.group(0)!;
+    try {
+      final decoded = base64.decode(chunk);
+      final decodedText = utf8.decode(decoded, allowMalformed: true);
+      final found = _findFirstVless(decodedText);
+      if (found != null) return found;
+    } catch (_) {
+      // ignore decode errors and continue
+    }
+  }
+  return null;
 }
 
 /// Попытка извлечь имя профиля из vless:// ссылки.

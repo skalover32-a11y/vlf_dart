@@ -68,10 +68,61 @@ class _HomeScreenState extends State<HomeScreen> {
           if (mounted) showAppSnackBar(context, msg);
           return;
         }
-        final p = await core.addProfileFromText(text);
-        final msg = 'Профиль "${p.name}" добавлен';
-        core.logger.append('$msg\n');
-        if (mounted) showAppSnackBar(context, msg);
+        try {
+          final p = await core.addProfileFromText(text);
+          final msg = 'Профиль "${p.name}" добавлен';
+          core.logger.append('$msg\n');
+          if (mounted) showAppSnackBar(context, msg);
+        } catch (e) {
+          final err = e.toString();
+          core.logger.append('Ошибка при добавлении профиля: $err\n');
+          if (err.contains('Сетевая ошибка') || err.contains('Failed host lookup')) {
+            if (!mounted) return;
+            final controller = TextEditingController(text: text);
+            final res = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => appDialogWrapper(
+                buildAppAlert(
+                  title: const Text('Не удалось загрузить URL'),
+                  content: TextField(
+                    controller: controller,
+                    maxLines: null,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      hintText: 'Вставьте содержимое подписки здесь',
+                    ),
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(false),
+                      child: const Text('Отмена'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(true),
+                      child: const Text('Добавить'),
+                    ),
+                  ],
+                ),
+                width: 520.0,
+              ),
+            );
+            if (res == true) {
+              try {
+                final p2 = await core.addProfileFromText(controller.text);
+                final msg = 'Профиль "${p2.name}" добавлен';
+                core.logger.append('$msg\n');
+                if (mounted) showAppSnackBar(context, msg);
+              } catch (e2) {
+                final msg = 'Ошибка при добавлении профиля: $e2';
+                core.logger.append('$msg\n');
+                if (mounted) showAppSnackBar(context, msg);
+              }
+            }
+            return;
+          }
+
+          if (mounted) showAppSnackBar(context, 'Ошибка при добавлении профиля: $err');
+        }
       } catch (e) {
         final msg = 'Ошибка при добавлении профиля: $e';
         core.logger.append('$msg\n');
@@ -141,9 +192,55 @@ class _HomeScreenState extends State<HomeScreen> {
         core.logger.append('$msg\n');
         if (mounted) showAppSnackBar(context, msg);
       } catch (e) {
-        final msg = 'Ошибка при добавлении профиля: $e';
-        core.logger.append('$msg\n');
-        if (mounted) showAppSnackBar(context, msg);
+        final err = e.toString();
+        core.logger.append('Ошибка при добавлении профиля: $err\n');
+        // If network/DNS error, offer user to paste subscription body manually
+        if (err.contains('Сетевая ошибка') || err.contains('Failed host lookup')) {
+          if (!mounted) return;
+          final controller = TextEditingController(text: text);
+          final res = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => appDialogWrapper(
+              buildAppAlert(
+                title: const Text('Не удалось загрузить URL'),
+                content: TextField(
+                  controller: controller,
+                  maxLines: null,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: const InputDecoration(
+                    hintText: 'Вставьте содержимое подписки здесь',
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: const Text('Отмена'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(true),
+                    child: const Text('Добавить'),
+                  ),
+                ],
+              ),
+              width: 520.0,
+            ),
+          );
+          if (res == true) {
+            try {
+              final p2 = await core.addProfileFromText(controller.text);
+              final msg = 'Профиль "${p2.name}" добавлен';
+              core.logger.append('$msg\n');
+              if (mounted) showAppSnackBar(context, msg);
+            } catch (e2) {
+              final msg = 'Ошибка при добавлении профиля: $e2';
+              core.logger.append('$msg\n');
+              if (mounted) showAppSnackBar(context, msg);
+            }
+          }
+          return;
+        }
+
+        if (mounted) showAppSnackBar(context, 'Ошибка при добавлении профиля: $err');
       }
     }
 

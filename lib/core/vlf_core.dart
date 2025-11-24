@@ -289,6 +289,42 @@ class VlfCore {
     }
   }
 
+  /// Import profiles from a JSON string. Accepts either a plain JSON array
+  /// of profile objects or an object with key `profiles` containing the list.
+  /// Returns number of profiles added.
+  Future<int> importProfilesFromJsonString(String txt) async {
+    try {
+      final decoded = json.decode(txt);
+      List<dynamic> list;
+      if (decoded is Map<String, dynamic> && decoded['profiles'] != null) {
+        list = List<dynamic>.from(decoded['profiles']);
+      } else if (decoded is List) {
+        list = List<dynamic>.from(decoded);
+      } else {
+        throw Exception('Неизвестный формат файла');
+      }
+
+      var added = 0;
+      for (final e in list) {
+        try {
+          final m = Map<String, dynamic>.from(e as Map);
+          final p = Profile.fromJson(m);
+          final exists = profileManager.profiles.any((x) => x.url == p.url);
+          if (!exists) {
+            addProfile(p);
+            added++;
+          }
+        } catch (_) {
+          // skip invalid entries
+        }
+      }
+
+      return added;
+    } catch (e) {
+      throw Exception('Не удалось импортировать профили: $e');
+    }
+  }
+
   /// Convenience: connect by Profile object (will add profile if not present)
   Future<void> connectWithProfile(Profile p) async {
     var idx = profileManager.profiles.indexWhere(

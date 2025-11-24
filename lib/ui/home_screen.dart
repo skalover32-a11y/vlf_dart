@@ -224,6 +224,31 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     }
 
+    // Import profiles from JSON file
+    Future<void> _handleImportProfiles() async {
+      setState(() => _isMainMenuOpen = false);
+      try {
+        final result = await FilePicker.platform.pickFiles(
+          type: FileType.custom,
+          allowedExtensions: ['json'],
+        );
+        if (result == null || result.files.isEmpty) return; // cancelled
+        final path = result.files.single.path;
+        if (path == null) return;
+        final file = File(path);
+        final txt = await file.readAsString();
+        final added = await widget.core.importProfilesFromJsonString(txt);
+        final msg = 'Импортировано профилей: $added';
+        widget.core.logger.append('$msg\n');
+        if (mounted) showAppSnackBar(context, msg);
+        setState(() {});
+      } catch (e) {
+        final msg = 'Ошибка импорта профилей: $e';
+        widget.core.logger.append('$msg\n');
+        if (mounted) showAppSnackBar(context, msg);
+      }
+    }
+
     String _normalizeExceptionMessage(Object e) {
       var s = e.toString();
       const p = 'Exception: ';
@@ -573,6 +598,14 @@ class _HomeScreenState extends State<HomeScreen> {
                                                     ),
                                               ),
                                             );
+                                          },
+                                        ),
+                                        PopoverMenuItem(
+                                          icon: Icons.file_upload,
+                                          text: 'Импорт профилей',
+                                          onTap: () {
+                                            setState(() => _isMainMenuOpen = false);
+                                            _handleImportProfiles();
                                           },
                                         ),
                                         PopoverMenuItem(

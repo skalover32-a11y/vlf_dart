@@ -6,6 +6,13 @@
       "ptype": "VLESS",
       "address": "",
       "remark": ""
+    },
+    {
+      "name": "vlf_tun-249717973@bot",
+      "url": "vless://0736c3ab-fb0e-4be2-96f9-e427dea07e80@live-fund.ru:22144?encryption=none&flow=xtls-rprx-vision&fp=random&pbk=eNsnE3m8IytbBrDclpIX7XMqe7wdRf9KjM5Lj_WI6R4&security=reality&sid=31803b0cd8ff0c&sni=bibliotheek.nl&spx=%2FrHC1QWuCigAJLl6&type=tcp#vlf_tun-249717973@bot",
+      "ptype": "VLESS",
+      "address": "",
+      "remark": ""
     }
   ],
   "ru_mode": true,

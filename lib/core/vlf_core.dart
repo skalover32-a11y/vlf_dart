@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'dart:io';
-// import 'dart:convert';
+import 'dart:convert';
 
 import '../config_store.dart';
 import '../profile_manager.dart';
@@ -9,6 +9,7 @@ import '../singbox_manager.dart';
 import '../logger.dart';
 import 'package:flutter/foundation.dart';
 import '../subscription_decoder.dart';
+import '../singbox_config_clean.dart';
 
 /// Фасад, объединяющий core-модули для UI.
 
@@ -268,6 +269,38 @@ class VlfCore {
       idx = profileManager.profiles.length - 1;
     }
     await startTunnel(idx);
+  }
+
+  /// Generate and write `config.json` (and `config_debug.json`) for the
+  /// currently selected profile without starting sing-box.
+  Future<void> writeConfigForCurrentProfile() async {
+    final idx = currentProfileIndex.value;
+    if (idx == null) throw Exception('No profile selected');
+    if (idx < 0 || idx >= profileManager.profiles.length) throw Exception('Profile index out of range');
+    final p = profileManager.profiles[idx];
+
+    // build config using existing generator
+    final cfg = await buildSingboxConfig(
+      p.url,
+      ruMode,
+      exclusions.siteExclusions,
+      exclusions.appExclusions,
+    );
+
+    final encoder = const JsonEncoder.withIndent('  ');
+    final jsonText = encoder.convert(cfg);
+
+    try {
+      final cfgPath = File('${configStore.baseDir.path}${Platform.pathSeparator}config.json');
+      await cfgPath.writeAsString(jsonText, flush: true);
+      logger.append('config.json сгенерирован для профиля "${p.name}".\n');
+      final debugFile = File('${configStore.baseDir.path}${Platform.pathSeparator}config_debug.json');
+      await debugFile.writeAsString(jsonText, flush: true);
+      logger.append('config_debug.json записан для проверки.\n');
+    } catch (e) {
+      logger.append('Ошибка при записи config.json: $e\n');
+      rethrow;
+    }
   }
 
   Future<void> disconnect() async {

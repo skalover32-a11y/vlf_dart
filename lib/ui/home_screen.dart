@@ -242,7 +242,13 @@ class _HomeScreenState extends State<HomeScreen> {
           return;
         }
         try {
-          final selected = profiles.first;
+          final selected = core.getCurrentProfile();
+          if (selected == null) {
+            final msg = 'Нет выбранного профиля. Выберите профиль в шапке.';
+            core.logger.append('$msg\n');
+            if (mounted) showAppSnackBar(context, msg);
+            return;
+          }
           await core.connectWithProfile(selected);
         } catch (e) {
           final msg = _normalizeExceptionMessage(e);
@@ -330,29 +336,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ProfileHeader(
                                         core: core,
                                         onRefreshPressed: () async {
-                                          final current = core
-                                              .getCurrentProfile();
-                                          if (current == null) {
-                                            final msg =
-                                                'Нет выбранного профиля для обновления';
-                                            core.logger.append('$msg\n');
-                                            if (mounted)
-                                              showAppSnackBar(context, msg);
-                                            return;
-                                          }
+                                          // Refresh should only regenerate the config
+                                          // for the currently selected profile without
+                                          // starting the tunnel.
                                           try {
-                                            await core.connectWithProfile(
-                                              current,
-                                            );
-                                            final msg = 'Профиль обновлён';
+                                            await core.writeConfigForCurrentProfile();
+                                            final msg = 'Конфиг профиля обновлён';
                                             core.logger.append('$msg\n');
-                                            if (mounted)
-                                              showAppSnackBar(context, msg);
+                                            if (mounted) showAppSnackBar(context, msg);
                                           } catch (e) {
-                                            final msg = 'Ошибка обновления: $e';
+                                            final msg = 'Ошибка обновления конфига: $e';
                                             core.logger.append('$msg\n');
-                                            if (mounted)
-                                              showAppSnackBar(context, msg);
+                                            if (mounted) showAppSnackBar(context, msg);
                                           }
                                         },
                                         onHeaderTap: () {

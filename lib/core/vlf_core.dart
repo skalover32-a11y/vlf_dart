@@ -259,6 +259,38 @@ class VlfCore {
 
   Future<String> getIp() => singboxManager.updateIp();
 
+  /// Получить строковое представление геолокации по текущему IP.
+  /// Возвращает '-' при ошибке или если информации нет.
+  Future<String> getIpLocation() async {
+    try {
+      final ip = await getIp();
+      if (ip == '-' || ip.trim().isEmpty) return '-';
+      final client = HttpClient();
+      try {
+        final uri = Uri.parse('http://ip-api.com/json/$ip?fields=status,country,regionName,city');
+        final req = await client.getUrl(uri);
+        final resp = await req.close();
+        if (resp.statusCode != 200) return '-';
+        final txt = await resp.transform(utf8.decoder).join();
+        final j = json.decode(txt) as Map<String, dynamic>;
+        if (j['status'] != 'success') return '-';
+        final city = (j['city'] ?? '').toString();
+        final region = (j['regionName'] ?? '').toString();
+        final country = (j['country'] ?? '').toString();
+        final parts = <String>[];
+        if (city.isNotEmpty) parts.add(city);
+        if (region.isNotEmpty) parts.add(region);
+        if (country.isNotEmpty) parts.add(country);
+        if (parts.isEmpty) return '-';
+        return parts.join(', ');
+      } finally {
+        client.close(force: true);
+      }
+    } catch (_) {
+      return '-';
+    }
+  }
+
   /// Convenience: connect by Profile object (will add profile if not present)
   Future<void> connectWithProfile(Profile p) async {
     var idx = profileManager.profiles.indexWhere(

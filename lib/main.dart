@@ -5,11 +5,46 @@ import 'ui/home_screen.dart';
 
 // Window sizing on desktop
 import 'package:window_size/window_size.dart' as window_size;
+import 'package:window_manager/window_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // On Windows, initialize window_manager and set a reasonable start size.
+  if (Platform.isWindows) {
+    try {
+      await windowManager.ensureInitialized();
 
-  if (Platform.isWindows || Platform.isLinux || Platform.isMacOS) {
+      // start size slightly taller to give more vertical room for logs and content
+      const startSize = Size(480, 980);
+      const minSize = Size(430, 900);
+
+      final options = WindowOptions(
+        size: startSize,
+        center: true,
+        minimumSize: minSize,
+        title: 'VLF tunnel',
+      );
+
+      windowManager.waitUntilReadyToShow(options, () async {
+        await windowManager.setTitle('VLF tunnel');
+        await windowManager.setSize(startSize);
+        await windowManager.setMinimumSize(minSize);
+        await windowManager.show();
+        await windowManager.focus();
+      });
+    } catch (_) {
+      // fallback for environments where window_manager is not available
+      try {
+        final initialSize = Size(430, 860);
+        final minSize2 = Size(400, 760);
+        window_size.setWindowTitle('VLF tunnel');
+        window_size.setWindowMinSize(minSize2);
+        window_size.setWindowFrame(
+          Rect.fromLTWH(100, 100, initialSize.width, initialSize.height),
+        );
+      } catch (_) {}
+    }
+  } else if (Platform.isLinux || Platform.isMacOS) {
     try {
       final initialSize = Size(430, 860);
       final minSize = Size(400, 760);
@@ -69,7 +104,52 @@ class Bootstrap extends StatelessWidget {
           );
         }
         final core = snapshot.data!;
-        return HomeScreen(core: core);
+        return AppWindowWrapper(child: HomeScreen(core: core));
+      },
+    );
+  }
+}
+
+// Wrapper that renders the mobile layout at fixed design width (430) and
+// scales it based on available width. Also reduces external SafeArea padding
+// slightly via MediaQuery so the UI appears denser without modifying widgets.
+class AppWindowWrapper extends StatelessWidget {
+  final Widget child;
+  const AppWindowWrapper({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // design width is 430; compute a scale factor based on available width
+        double scale = (constraints.maxWidth / 430.0);
+        if (scale.isNaN || scale.isInfinite) scale = 1.0;
+        scale = scale.clamp(0.8, 1.4);
+
+        // Reduce external safe area padding slightly so the UI is denser.
+        final mq = MediaQuery.of(context);
+        final adjusted = mq.copyWith(
+          padding: EdgeInsets.only(
+            left: mq.padding.left,
+            right: mq.padding.right,
+            top: mq.padding.top > 4 ? 4 : mq.padding.top,
+            bottom: mq.padding.bottom > 4 ? 4 : mq.padding.bottom,
+          ),
+        );
+
+        return MediaQuery(
+          data: adjusted,
+          child: Center(
+            child: Transform.scale(
+              scale: scale,
+              alignment: Alignment.topCenter,
+              child: SizedBox(
+                width: 430,
+                child: child,
+              ),
+            ),
+          ),
+        );
       },
     );
   }

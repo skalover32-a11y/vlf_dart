@@ -10,7 +10,7 @@ import 'widgets/vlf_circle_button.dart';
 import 'widgets/ru_mode_button.dart';
 import 'widgets/profile_header.dart';
 import 'widgets/status_block.dart';
-import 'widgets/log_panel.dart';
+import 'logs_screen.dart';
 import 'widgets/popover_menu.dart';
 import 'widgets/footer_links.dart';
 import 'widgets/profile_list_sheet.dart';
@@ -452,9 +452,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       StatusBlock(core: core),
                                       const SizedBox(height: 24),
 
-                                      // Logs header + count (LogPanel includes header)
-                                      // LogPanel will size itself and the whole card scrolls when needed
-                                      LogPanel(core: core),
+                                      // Logs moved to a separate screen (burger menu)
 
                                       const SizedBox(height: 12),
                                       const FooterLinks(),
@@ -572,6 +570,18 @@ class _HomeScreenState extends State<HomeScreen> {
                                                     ExclusionsManager(
                                                       core: core,
                                                     ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        PopoverMenuItem(
+                                          icon: Icons.list_alt,
+                                          text: 'Логи',
+                                          onTap: () {
+                                            setState(() => _isMainMenuOpen = false);
+                                            Navigator.of(context).push(
+                                              MaterialPageRoute(
+                                                builder: (c) => LogsScreen(core: core),
                                               ),
                                             );
                                           },

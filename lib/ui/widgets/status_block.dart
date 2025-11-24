@@ -63,9 +63,22 @@ class StatusBlock extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text('Локация:', style: TextStyle(color: Colors.white70)),
-              Text('-', style: TextStyle(color: Colors.white)),
+            children: [
+              const Text('Локация:', style: TextStyle(color: Colors.white70)),
+              SizedBox(
+                width: 200,
+                child: FutureBuilder<String>(
+                  future: core.getIpLocation(),
+                  builder: (context, snap) {
+                    if (snap.connectionState == ConnectionState.waiting)
+                      return const Text('-', style: TextStyle(color: Colors.white70));
+                    return Text(
+                      snap.data ?? '-',
+                      style: const TextStyle(color: Colors.white),
+                    );
+                  },
+                ),
+              ),
             ],
           ),
         ],

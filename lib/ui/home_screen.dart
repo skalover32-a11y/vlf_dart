@@ -274,7 +274,8 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: const Color(0xFF0B0E13),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+          // make outer padding minimal so the card is closer to window edges
+          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
           child: Center(
             child: LayoutBuilder(
               builder: (context, constraints) {

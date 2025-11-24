@@ -281,7 +281,9 @@ class _HomeScreenState extends State<HomeScreen> {
               builder: (context, constraints) {
                 final cardMaxWidth =
                     700.0; // allow wider cards on large screens
-                final cardMaxHeight = MediaQuery.of(context).size.height * 0.92;
+                // Use available height from LayoutBuilder constraints so the
+                // card fills the vertical space and avoids bottom gaps.
+                final cardMaxHeight = constraints.maxHeight;
                 // Use a fixed "design" size and scale it down when available space is smaller.
                 // This keeps the layout proportional when the window is resized.
                 const double designWidth = 430.0;

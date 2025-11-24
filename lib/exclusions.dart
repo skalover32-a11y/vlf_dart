@@ -3,8 +3,8 @@ class Exclusions {
   List<String> appExclusions;
 
   Exclusions({List<String>? siteExclusions, List<String>? appExclusions})
-      : siteExclusions = siteExclusions ?? [],
-        appExclusions = appExclusions ?? [];
+    : siteExclusions = siteExclusions ?? [],
+      appExclusions = appExclusions ?? [];
 
   void addSite(String domain) {
     if (domain.isEmpty) return;
@@ -37,12 +37,12 @@ class Exclusions {
   }
 
   Map<String, dynamic> toJson() => {
-        'site_exclusions': siteExclusions,
-        'app_exclusions': appExclusions,
-      };
+    'site_exclusions': siteExclusions,
+    'app_exclusions': appExclusions,
+  };
 
   static Exclusions fromJson(Map<String, dynamic> j) => Exclusions(
-        siteExclusions: List<String>.from(j['site_exclusions'] ?? []),
-        appExclusions: List<String>.from(j['app_exclusions'] ?? []),
-      );
+    siteExclusions: List<String>.from(j['site_exclusions'] ?? []),
+    appExclusions: List<String>.from(j['app_exclusions'] ?? []),
+  );
 }

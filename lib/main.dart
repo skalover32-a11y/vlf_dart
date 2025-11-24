@@ -15,7 +15,9 @@ Future<void> main() async {
       final minSize = Size(400, 760);
       window_size.setWindowTitle('VLF tunnel');
       window_size.setWindowMinSize(minSize);
-      window_size.setWindowFrame(Rect.fromLTWH(100, 100, initialSize.width, initialSize.height));
+      window_size.setWindowFrame(
+        Rect.fromLTWH(100, 100, initialSize.width, initialSize.height),
+      );
     } catch (_) {
       // ignore if window sizing not available
     }
@@ -31,8 +33,12 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'VLF tunnel',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.teal),
+      theme: ThemeData.dark().copyWith(
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.teal,
+          brightness: Brightness.dark,
+        ),
+        useMaterial3: false,
       ),
       home: const Bootstrap(),
     );
@@ -57,7 +63,9 @@ class Bootstrap extends StatelessWidget {
         }
         if (snapshot.hasError) {
           return Scaffold(
-            body: Center(child: Text('Initialization error: ${snapshot.error}')),
+            body: Center(
+              child: Text('Initialization error: ${snapshot.error}'),
+            ),
           );
         }
         final core = snapshot.data!;

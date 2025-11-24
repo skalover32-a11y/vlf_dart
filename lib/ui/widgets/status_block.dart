@@ -15,7 +15,13 @@ class StatusBlock extends StatelessWidget {
         color: const Color(0xFF0F1A22),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white10, width: 1),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.25), blurRadius: 8, offset: const Offset(0, 4))],
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -26,7 +32,10 @@ class StatusBlock extends StatelessWidget {
               const Text('Статус:', style: TextStyle(color: Colors.white70)),
               ValueListenableBuilder<bool>(
                 valueListenable: core.isConnected,
-                builder: (context, connected, _) => Text(connected ? 'Активен' : 'Отключено', style: const TextStyle(color: Colors.white)),
+                builder: (context, connected, _) => Text(
+                  connected ? 'Активен' : 'Отключено',
+                  style: const TextStyle(color: Colors.white),
+                ),
               ),
             ],
           ),
@@ -38,8 +47,15 @@ class StatusBlock extends StatelessWidget {
               FutureBuilder<String>(
                 future: core.getIp(),
                 builder: (context, snap) {
-                  if (snap.connectionState == ConnectionState.waiting) return const Text('-', style: TextStyle(color: Colors.white70));
-                  return Text(snap.data ?? '-', style: const TextStyle(color: Colors.white));
+                  if (snap.connectionState == ConnectionState.waiting)
+                    return const Text(
+                      '-',
+                      style: TextStyle(color: Colors.white70),
+                    );
+                  return Text(
+                    snap.data ?? '-',
+                    style: const TextStyle(color: Colors.white),
+                  );
                 },
               ),
             ],
@@ -57,4 +73,3 @@ class StatusBlock extends StatelessWidget {
     );
   }
 }
-

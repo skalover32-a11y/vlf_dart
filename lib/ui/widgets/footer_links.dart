@@ -7,7 +7,8 @@ class FooterLinks extends StatelessWidget {
   Future<void> _openLink(String url) async {
     try {
       if (Platform.isWindows) {
-        await Process.start('powershell', ['-NoProfile', '-Command', 'Start-Process', url]);
+        // Use cmd start to reliably open URLs (handles full URL with path)
+        await Process.start('cmd', ['/c', 'start', '', url]);
       } else if (Platform.isLinux) {
         await Process.start('xdg-open', [url]);
       } else if (Platform.isMacOS) {
@@ -24,7 +25,10 @@ class FooterLinks extends StatelessWidget {
         InkWell(
           onTap: () => _openLink('https://t.me/maloff32'),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 8.0,
+            ),
             child: Row(
               children: const [
                 Icon(Icons.send, size: 16, color: Color(0xFF9CA3AF)),
@@ -35,9 +39,12 @@ class FooterLinks extends StatelessWidget {
           ),
         ),
         InkWell(
-          onTap: () => _openLink('https://github.com/'),
+          onTap: () => _openLink('https://github.com/skalover32-a11y/'),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12.0,
+              vertical: 8.0,
+            ),
             child: Row(
               children: const [
                 Icon(Icons.code, size: 16, color: Color(0xFF9CA3AF)),

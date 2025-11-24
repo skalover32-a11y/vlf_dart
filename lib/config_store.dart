@@ -10,11 +10,16 @@ class ConfigStore {
   final String guiConfigFileName;
   final String profilesFileName;
 
-  ConfigStore(this.baseDir,
-      {this.guiConfigFileName = 'vlf_gui_config.json', this.profilesFileName = 'profiles.json'});
+  ConfigStore(
+    this.baseDir, {
+    this.guiConfigFileName = 'vlf_gui_config.json',
+    this.profilesFileName = 'profiles.json',
+  });
 
-  File get _guiConfigFile => File('${baseDir.path}${Platform.pathSeparator}$guiConfigFileName');
-  File get _profilesFile => File('${baseDir.path}${Platform.pathSeparator}$profilesFileName');
+  File get _guiConfigFile =>
+      File('${baseDir.path}${Platform.pathSeparator}$guiConfigFileName');
+  File get _profilesFile =>
+      File('${baseDir.path}${Platform.pathSeparator}$profilesFileName');
 
   /// Load GUI config; returns a Map with defaults when файл отсутствует/битый.
   Map<String, dynamic> loadGuiConfig() {
@@ -22,8 +27,9 @@ class ConfigStore {
       return {
         'profiles': [],
         'ru_mode': true,
+        'mode': 'tun',
         'site_exclusions': [],
-        'app_exclusions': []
+        'app_exclusions': [],
       };
     }
     try {
@@ -34,8 +40,9 @@ class ConfigStore {
       return {
         'profiles': [],
         'ru_mode': true,
+        'mode': 'tun',
         'site_exclusions': [],
-        'app_exclusions': []
+        'app_exclusions': [],
       };
     }
   }
@@ -55,7 +62,9 @@ class ConfigStore {
       final txt = _profilesFile.readAsStringSync();
       final j = json.decode(txt);
       if (j is List) {
-        return j.map((e) => Profile.fromJson(Map<String, dynamic>.from(e))).toList();
+        return j
+            .map((e) => Profile.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
       }
     } catch (_) {}
     return [];
@@ -63,7 +72,9 @@ class ConfigStore {
 
   void saveProfiles(List<Profile> profiles) {
     try {
-      final txt = JsonEncoder.withIndent('  ').convert(profiles.map((p) => p.toJson()).toList());
+      final txt = JsonEncoder.withIndent(
+        '  ',
+      ).convert(profiles.map((p) => p.toJson()).toList());
       _profilesFile.writeAsStringSync(txt);
     } catch (_) {}
   }

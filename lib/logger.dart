@@ -8,7 +8,9 @@ class Logger {
   void append(String text) {
     _ctrl.add(text);
     // примерно считаем количество строк
-    _lines += '\n'.allMatches(text).length + (text.isNotEmpty && !text.endsWith('\n') ? 1 : 0);
+    _lines +=
+        '\n'.allMatches(text).length +
+        (text.isNotEmpty && !text.endsWith('\n') ? 1 : 0);
   }
 
   Stream<String> get stream => _ctrl.stream;

@@ -17,26 +17,30 @@ class _LogPanelState extends State<LogPanel> {
   final List<String> _items = [];
   StreamSubscription<String>? _sub;
   final ScrollController _scrollController = ScrollController();
+  bool _loggingPaused = true; // default: paused
 
   @override
   void initState() {
     super.initState();
     _sub = widget.core.logStream.listen((line) {
-      setState(() {
-        _items.add(line);
-        if (_items.length > 1000) _items.removeAt(0);
-      });
+      // Only update UI list when not paused. Logger itself continues to receive lines.
+      if (!_loggingPaused) {
+        setState(() {
+          _items.add(line);
+          if (_items.length > 1000) _items.removeAt(0);
+        });
 
-      // After the new frame, scroll to bottom to show latest log
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (_scrollController.hasClients) {
-          _scrollController.animateTo(
-            _scrollController.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
-        }
-      });
+        // After the new frame, scroll to bottom to show latest log
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scrollController.hasClients) {
+            _scrollController.animateTo(
+              _scrollController.position.maxScrollExtent,
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+            );
+          }
+        });
+      }
     });
   }
 
@@ -55,29 +59,90 @@ class _LogPanelState extends State<LogPanel> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Логи', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            Text('${_items.length} записей', style: const TextStyle(color: Color(0xFF9CA3AF))),
+            Row(
+              children: [
+                const Text(
+                  'Логи',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Play/Pause button
+                GestureDetector(
+                  onTap: () {
+                    setState(() {
+                      _loggingPaused = !_loggingPaused;
+                      // if resuming, we may want to show any new lines only from now on
+                      if (!_loggingPaused) {
+                        // scroll to bottom on resume
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (_scrollController.hasClients) {
+                            _scrollController.animateTo(
+                              _scrollController.position.maxScrollExtent,
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOut,
+                            );
+                          }
+                        });
+                      }
+                    });
+                  },
+                  child: Container(
+                    width: 36,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E2A36),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Icon(
+                      _loggingPaused ? Icons.play_arrow : Icons.pause,
+                      size: 18,
+                      color: const Color(0xFF9CA3AF),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              '${_items.length} записей',
+              style: const TextStyle(color: Color(0xFF9CA3AF)),
+            ),
           ],
         ),
         const SizedBox(height: 8),
-        // Let the ListView fill remaining vertical space inside this Column.
-        Expanded(
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF071426),
-              borderRadius: BorderRadius.circular(24),
-            ),
+        // Let the ListView expand if needed; when parent is small, the whole page will scroll.
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF071426),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          // Wrap with SelectionArea so user can select/copy text with mouse on desktop
+          child: SelectionArea(
             child: ListView.builder(
               controller: _scrollController,
               reverse: false,
+              shrinkWrap: true,
+              physics: const AlwaysScrollableScrollPhysics(),
               itemCount: _items.length,
               itemBuilder: (context, index) {
                 final line = _items[index];
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 6.0),
-                  child: Text(line, style: const TextStyle(color: Colors.white70, fontFamily: 'monospace', fontSize: 13)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8.0,
+                    vertical: 6.0,
+                  ),
+                  child: Text(
+                    line,
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontFamily: 'monospace',
+                      fontSize: 13,
+                    ),
+                  ),
                 );
               },
             ),

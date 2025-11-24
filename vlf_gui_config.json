@@ -1,14 +1,14 @@
 {
   "profiles": [
     {
-      "name": "test",
-      "url": "https://example.com/sub",
+      "name": "vlfFIN-249717973@bot",
+      "url": "vless://cc0bf5d6-f57d-4969-ae07-5954b5aeac64@troynichek-live.ru:10745?encryption=none&flow=xtls-rprx-vision&fp=random&pbk=8xDmZ6DBcNQg5c5DHbUDY6zvaBoe0tU2_hvToLFimw0&security=reality&sid=a8cf85de1c&sni=www.caprover.com&spx=%2FTaofCrfQea5rKEO&type=tcp#vlfFIN-249717973@bot",
       "ptype": "VLESS",
       "address": "",
       "remark": ""
     }
   ],
-  "ru_mode": false,
+  "ru_mode": true,
   "site_exclusions": [],
   "app_exclusions": []
 }

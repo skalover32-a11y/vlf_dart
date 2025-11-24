@@ -11,7 +11,10 @@ class VlfCircleButton extends StatelessWidget {
     final size = 260.0;
     final pad = 12.0;
     final gradient = isOn
-        ? RadialGradient(colors: [Colors.greenAccent.shade200, Colors.green.shade700], radius: 0.9)
+        ? RadialGradient(
+            colors: [Colors.greenAccent.shade200, Colors.green.shade700],
+            radius: 0.9,
+          )
         : LinearGradient(colors: [Color(0xFF0E0F12), Color(0xFF1A1A1A)]);
 
     return GestureDetector(
@@ -24,7 +27,13 @@ class VlfCircleButton extends StatelessWidget {
             gradient: gradient,
             shape: BoxShape.circle,
             boxShadow: isOn
-                ? [BoxShadow(color: Colors.green.withOpacity(0.5), blurRadius: 24, spreadRadius: 4)]
+                ? [
+                    BoxShadow(
+                      color: Colors.green.withOpacity(0.5),
+                      blurRadius: 24,
+                      spreadRadius: 4,
+                    ),
+                  ]
                 : [],
           ),
           child: Stack(
@@ -32,18 +41,35 @@ class VlfCircleButton extends StatelessWidget {
             children: [
               Container(
                 margin: EdgeInsets.all(pad),
-                decoration: BoxDecoration(color: Colors.black12, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: Colors.black12,
+                  shape: BoxShape.circle,
+                ),
               ),
               Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('V L F', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
+                  Text(
+                    'V L F',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                   SizedBox(height: 8),
                   Container(width: 140, height: 2, color: Colors.white24),
                   SizedBox(height: 8),
-                  Text(isOn ? 'ON' : 'OFF', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
+                  Text(
+                    isOn ? 'ON' : 'OFF',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ],
-              )
+              ),
             ],
           ),
         ),

@@ -263,6 +263,40 @@ class VlfCore {
     try {
       final ip = await getIp();
       if (ip == '-' || ip.trim().isEmpty) return '-';
+      
+      // Use PowerShell via system stack to ensure traffic goes through TUN
+      if (Platform.isWindows) {
+        try {
+          final url = 'http://ip-api.com/json/$ip?fields=status,country,regionName,city';
+          final result = await Process.run(
+            'powershell',
+            [
+              '-NoProfile',
+              '-Command',
+              '(Invoke-WebRequest -Uri "$url" -UseBasicParsing).Content',
+            ],
+            runInShell: false,
+          ).timeout(const Duration(seconds: 10));
+          if (result.exitCode == 0) {
+            final txt = (result.stdout?.toString() ?? '').trim();
+            if (txt.isNotEmpty) {
+              final j = json.decode(txt) as Map<String, dynamic>;
+              if (j['status'] == 'success') {
+                final city = (j['city'] ?? '').toString();
+                final region = (j['regionName'] ?? '').toString();
+                final country = (j['country'] ?? '').toString();
+                final parts = <String>[];
+                if (city.isNotEmpty) parts.add(city);
+                if (region.isNotEmpty) parts.add(region);
+                if (country.isNotEmpty) parts.add(country);
+                if (parts.isNotEmpty) return parts.join(', ');
+              }
+            }
+          }
+        } catch (_) {}
+      }
+      
+      // Fallback to direct HttpClient
       final client = HttpClient();
       try {
         final uri = Uri.parse('http://ip-api.com/json/$ip?fields=status,country,regionName,city');

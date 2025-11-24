@@ -210,7 +210,7 @@ class SingboxManager {
             }
           }
         } catch (_) {
-          logger.append('[ERR] ' + String.fromCharCodes(data));
+          logger.append('[ERR] ${String.fromCharCodes(data)}');
         }
       },
       onDone: () {
@@ -344,19 +344,42 @@ class SingboxManager {
   }
 
   Future<String> updateIp() async {
-    final client = HttpClient();
+    // Use curl via system stack to ensure traffic goes through TUN interface
+    if (Platform.isWindows) {
+      try {
+        final result = await Process.run(
+          'powershell',
+          [
+            '-NoProfile',
+            '-Command',
+            r'(Invoke-WebRequest -Uri "https://api.ipify.org?format=text" -UseBasicParsing).Content.Trim()',
+          ],
+          runInShell: false,
+        ).timeout(const Duration(seconds: 10));
+        if (result.exitCode == 0) {
+          final ip = (result.stdout?.toString() ?? '').trim();
+          if (ip.isNotEmpty && !ip.contains('error') && !ip.contains('Exception')) {
+            return ip;
+          }
+        }
+      } catch (_) {}
+    }
+    // Fallback to direct HttpClient (may not use TUN on some platforms)
     try {
-      final req = await client.getUrl(
-        Uri.parse('https://api.ipify.org?format=text'),
-      );
-      final resp = await req.close();
-      if (resp.statusCode != 200) return '-';
-      final ip = await resp.transform(utf8.decoder).join();
-      return ip.trim();
+      final client = HttpClient();
+      try {
+        final req = await client.getUrl(
+          Uri.parse('https://api.ipify.org?format=text'),
+        );
+        final resp = await req.close();
+        if (resp.statusCode != 200) return '-';
+        final ip = await resp.transform(utf8.decoder).join();
+        return ip.trim();
+      } finally {
+        client.close(force: true);
+      }
     } catch (_) {
       return '-';
-    } finally {
-      client.close(force: true);
     }
   }
 
@@ -386,7 +409,7 @@ class SingboxManager {
           .map((a) => a.replaceAll('"', '""'))
           .join(' ');
       final ps =
-          'Start-Process -FilePath "${exe.replaceAll('"', '""')}" -ArgumentList "${argsEscaped}" -Verb RunAs';
+          'Start-Process -FilePath "${exe.replaceAll('"', '""')}" -ArgumentList "$argsEscaped" -Verb RunAs';
       await Process.start('powershell', [
         '-NoProfile',
         '-Command',

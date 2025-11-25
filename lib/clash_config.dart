@@ -50,12 +50,25 @@ Future<String> buildClashConfig(
   buffer.writeln('  enabled: true');
   buffer.writeln('  ipv6: false');
   buffer.writeln('  listen: 0.0.0.0:1053');
+  buffer.writeln('  enhanced-mode: fake-ip');
+  buffer.writeln('  fake-ip-range: 198.18.0.1/16');
+  buffer.writeln('  fake-ip-filter:');
+  buffer.writeln('    - "*.lan"');
+  buffer.writeln('    - "localhost.ptlogin2.qq.com"');
   buffer.writeln('  default-nameserver:');
   buffer.writeln('    - 1.1.1.1');
   buffer.writeln('    - 8.8.8.8');
   buffer.writeln('  nameserver:');
   buffer.writeln('    - https://1.1.1.1/dns-query');
   buffer.writeln('    - https://dns.google/dns-query');
+  
+  // В RU-режиме используем российские DNS для .ru/.su/.рф доменов
+  if (ruMode) {
+    buffer.writeln('  nameserver-policy:');
+    buffer.writeln('    "+.ru": ["https://dns.yandex.ru/dns-query", "77.88.8.8"]');
+    buffer.writeln('    "+.su": ["https://dns.yandex.ru/dns-query", "77.88.8.8"]');
+    buffer.writeln('    "+.рф": ["https://dns.yandex.ru/dns-query", "77.88.8.8"]');
+  }
   buffer.writeln('');
 
   // TUN конфигурация (ключевая часть для VPN-режима)
@@ -95,17 +108,18 @@ Future<String> buildClashConfig(
   buffer.writeln('      - "VLF-PROXY"');
   buffer.writeln('');
 
-  // Правила маршрутизации
+  // Правила маршрутизации (порядок важен!)
   buffer.writeln('rules:');
   
   // Локальный/приватный трафик напрямую
-  buffer.writeln('  - GEOIP,private,DIRECT');
+  buffer.writeln('  - GEOIP,private,DIRECT,no-resolve');
   
-  // RU-режим: российские домены в обход VPN
+  // RU-режим: российские домены и IP в обход VPN
   if (ruMode) {
     buffer.writeln('  - DOMAIN-SUFFIX,ru,DIRECT');
     buffer.writeln('  - DOMAIN-SUFFIX,su,DIRECT');
     buffer.writeln('  - DOMAIN-SUFFIX,рф,DIRECT');
+    buffer.writeln('  - GEOIP,RU,DIRECT,no-resolve');
   }
   
   // Исключения по доменам

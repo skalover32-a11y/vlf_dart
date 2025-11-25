@@ -1,14 +1,21 @@
 /// Генератор YAML-конфигурации для Clash Meta (mihomo) из VLESS-подписки.
-/// Основан на референсном скрипте build_config_clash.ps1.
 /// 
 /// Поддерживает только TUN-режим (без отдельного proxy-режима).
-/// Конфигурация включает:
-/// - DNS (DoH через 1.1.1.1 и dns.google)
-/// - TUN с auto-route и auto-detect-interface
-/// - VLESS прокси с Reality
-/// - Правила маршрутизации:
-///   * GLOBAL режим (ruMode = false): весь трафик через VPN, кроме локального
-///   * РФ режим (ruMode = true): российский трафик DIRECT, остальное через VPN
+/// 
+/// ПОРЯДОК ПРАВИЛ МАРШРУТИЗАЦИИ (строго по приоритету):
+/// 1. Исключения по процессам (PROCESS-NAME,app.exe,DIRECT)
+/// 2. Исключения по доменам (DOMAIN-SUFFIX,site.com,DIRECT)
+/// 3. Локальные сети (GEOIP,private,DIRECT)
+/// 4. РФ-режим (если ruMode=true):
+///    - DOMAIN-SUFFIX,ru/su/рф,DIRECT
+///    - GEOIP,RU,DIRECT
+///    - DOMAIN-SUFFIX,2ip.ru,DIRECT
+/// 5. Всё остальное через VPN (MATCH,VLF)
+/// 
+/// [vlessUrl] - VLESS-подписка с параметрами Reality
+/// [ruMode] - РФ-режим (true = российский трафик в обход VPN)
+/// [siteExcl] - список доменов для исключения из VPN
+/// [appExcl] - список процессов для исключения из VPN
 Future<String> buildClashConfig(
   String vlessUrl,
   bool ruMode,
@@ -112,60 +119,61 @@ Future<String> buildClashConfig(
   buffer.writeln('');
 
   // ==================== ПРАВИЛА МАРШРУТИЗАЦИИ ====================
-  // Порядок правил критически важен! Clash проверяет их сверху вниз.
+  // КРИТИЧЕСКИ ВАЖНЫЙ ПОРЯДОК (Clash проверяет сверху вниз):
+  // 1. Исключения по процессам (приложения)
+  // 2. Исключения по доменам (сайты)
+  // 3. Локальные сети
+  // 4. РФ-режим (если включен)
+  // 5. MATCH,VLF (всё остальное через VPN)
+  
   buffer.writeln('rules:');
   
-  // 1. Локальный/приватный трафик ВСЕГДА идёт напрямую (в обоих режимах)
-  buffer.writeln('  - GEOIP,private,DIRECT,no-resolve');
+  // ========== БЛОК 1: ИСКЛЮЧЕНИЯ ПО ПРИЛОЖЕНИЯМ ==========
+  // Эти процессы идут DIRECT (минуя VPN) независимо от режима
+  if (appExcl.isNotEmpty) {
+    buffer.writeln('  # --- Исключения: приложения ---');
+    for (final proc in appExcl) {
+      if (proc.trim().isNotEmpty) {
+        buffer.writeln('  - PROCESS-NAME,$proc,DIRECT');
+      }
+    }
+    buffer.writeln('');
+  }
   
+  // ========== БЛОК 2: ИСКЛЮЧЕНИЯ ПО ДОМЕНАМ ==========
+  // Эти сайты идут DIRECT (минуя VPN) независимо от режима
+  if (siteExcl.isNotEmpty) {
+    buffer.writeln('  # --- Исключения: домены ---');
+    for (final domain in siteExcl) {
+      if (domain.trim().isNotEmpty) {
+        buffer.writeln('  - DOMAIN-SUFFIX,$domain,DIRECT');
+      }
+    }
+    buffer.writeln('');
+  }
+  
+  // ========== БЛОК 3: ЛОКАЛЬНЫЕ СЕТИ ==========
+  // Локальный/приватный трафик ВСЕГДА идёт напрямую
+  buffer.writeln('  # --- Локальные сети ---');
+  buffer.writeln('  - GEOIP,private,DIRECT,no-resolve');
+  buffer.writeln('');
+  
+  // ========== БЛОК 4: РЕЖИМ РФ (если включен) ==========
   if (ruMode) {
-    // ========== РЕЖИМ РФ (ruMode = true) ==========
-    // Российский трафик идёт DIRECT (в обход VPN),
-    // остальное — через VPN (VLF).
-    
+    // РФ-режим: российский трафик идёт DIRECT (в обход VPN)
+    // Логика повторяет старую Python-версию (sing-box)
     buffer.writeln('  # --- РФ-режим: российский трафик в обход VPN ---');
     buffer.writeln('  - DOMAIN-SUFFIX,ru,DIRECT');
     buffer.writeln('  - DOMAIN-SUFFIX,su,DIRECT');
     buffer.writeln('  - DOMAIN-SUFFIX,рф,DIRECT');
     buffer.writeln('  - GEOIP,RU,DIRECT,no-resolve');
-    
-    // Пользовательские исключения (дополнительные домены/процессы DIRECT)
-    for (final domain in siteExcl) {
-      if (domain.trim().isNotEmpty) {
-        buffer.writeln('  - DOMAIN-SUFFIX,$domain,DIRECT');
-      }
-    }
-    for (final proc in appExcl) {
-      if (proc.trim().isNotEmpty) {
-        buffer.writeln('  - PROCESS-NAME,$proc,DIRECT');
-      }
-    }
-    
-    // Всё остальное через VPN
-    buffer.writeln('  - MATCH,VLF');
-    
-  } else {
-    // ========== ГЛОБАЛЬНЫЙ РЕЖИМ (ruMode = false) ==========
-    // Весь трафик (кроме локального) через VPN,
-    // но с возможностью исключений для отдельных доменов/процессов.
-    
-    buffer.writeln('  # --- Глобальный режим: весь трафик через VPN ---');
-    
-    // Пользовательские исключения (домены/процессы в обход VPN)
-    for (final domain in siteExcl) {
-      if (domain.trim().isNotEmpty) {
-        buffer.writeln('  - DOMAIN-SUFFIX,$domain,DIRECT');
-      }
-    }
-    for (final proc in appExcl) {
-      if (proc.trim().isNotEmpty) {
-        buffer.writeln('  - PROCESS-NAME,$proc,DIRECT');
-      }
-    }
-    
-    // Всё остальное через VPN
-    buffer.writeln('  - MATCH,VLF');
+    buffer.writeln('  - DOMAIN-SUFFIX,2ip.ru,DIRECT');
+    buffer.writeln('');
   }
+  
+  // ========== БЛОК 5: ВСЁ ОСТАЛЬНОЕ ЧЕРЕЗ VPN ==========
+  buffer.writeln('  # --- Всё остальное через VPN ---');
+  buffer.writeln('  - MATCH,VLF');
 
   return buffer.toString();
 }

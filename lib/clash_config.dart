@@ -167,7 +167,11 @@ Future<String> buildClashConfig(
     buffer.writeln('  - DOMAIN-SUFFIX,su,DIRECT');
     buffer.writeln('  - DOMAIN-SUFFIX,рф,DIRECT');
     buffer.writeln('  - GEOIP,RU,DIRECT,no-resolve');
-    buffer.writeln('  - DOMAIN-SUFFIX,2ip.ru,DIRECT');
+    
+    // Добавляем 2ip.ru только если его нет в пользовательских исключениях
+    if (!siteExcl.contains('2ip.ru')) {
+      buffer.writeln('  - DOMAIN-SUFFIX,2ip.ru,DIRECT');
+    }
     buffer.writeln('');
   }
   

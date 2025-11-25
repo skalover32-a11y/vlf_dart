@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'profile_manager.dart';
-import 'exclusions.dart';
 
 /// Управление чтением/записью `vlf_gui_config.json` и `profiles.json`.
 class ConfigStore {
@@ -22,11 +21,15 @@ class ConfigStore {
       File('${baseDir.path}${Platform.pathSeparator}$profilesFileName');
 
   /// Load GUI config; returns a Map with defaults when файл отсутствует/битый.
+  /// 
+  /// Дефолты:
+  /// - ru_mode: false (ГЛОБАЛЬНЫЙ режим — весь трафик через VPN)
+  /// - mode: 'tun' (TUN-режим)
   Map<String, dynamic> loadGuiConfig() {
     if (!_guiConfigFile.existsSync()) {
       return {
         'profiles': [],
-        'ru_mode': true,
+        'ru_mode': false, // ГЛОБАЛЬНЫЙ режим по умолчанию
         'mode': 'tun',
         'site_exclusions': [],
         'app_exclusions': [],
@@ -39,7 +42,7 @@ class ConfigStore {
     } catch (_) {
       return {
         'profiles': [],
-        'ru_mode': true,
+        'ru_mode': false, // ГЛОБАЛЬНЫЙ режим по умолчанию
         'mode': 'tun',
         'site_exclusions': [],
         'app_exclusions': [],

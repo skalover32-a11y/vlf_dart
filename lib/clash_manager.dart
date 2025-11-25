@@ -27,13 +27,15 @@ class ClashManager {
   ///
   /// [profileUrl] — VLESS-подписка (строка vless://, URL или base64)
   /// [baseDir] — рабочая директория (где будет config.yaml и откуда запускается mihomo.exe)
-  /// [ruMode] — режим обхода российских доменов
-  /// [siteExcl] — список доменов для исключения из VPN
-  /// [appExcl] — список процессов для исключения из VPN
+  /// [ruMode] — режим работы:
+  ///   * false (ГЛОБАЛЬНЫЙ): весь трафик через VPN, кроме локального
+  ///   * true (РФ-РЕЖИМ): российский трафик (RU GeoIP) в обход VPN, остальное через VPN
+  /// [siteExcl] — список доменов для исключения из VPN (DIRECT)
+  /// [appExcl] — список процессов для исключения из VPN (DIRECT)
   Future<void> start(
     String profileUrl,
     Directory baseDir, {
-    bool ruMode = true,
+    bool ruMode = false, // ГЛОБАЛЬНЫЙ режим по умолчанию
     List<String> siteExcl = const [],
     List<String> appExcl = const [],
   }) async {

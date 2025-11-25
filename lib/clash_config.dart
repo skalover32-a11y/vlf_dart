@@ -55,6 +55,8 @@ Future<String> buildClashConfig(
   buffer.writeln('');
 
   // DNS конфигурация
+  // КРИТИЧЕСКИ ВАЖНО: fake-ip режим необходим для корректной работы DOMAIN-SUFFIX правил
+  // НО он не должен мешать DIRECT-трафику (через fake-ip-filter)
   buffer.writeln('dns:');
   buffer.writeln('  enabled: true');
   buffer.writeln('  ipv6: false');
@@ -64,29 +66,43 @@ Future<String> buildClashConfig(
   buffer.writeln('  fake-ip-filter:');
   buffer.writeln('    - "*.lan"');
   buffer.writeln('    - "localhost.ptlogin2.qq.com"');
+  
+  // В РФ-режиме добавляем .ru/.su/.рф в fake-ip-filter
+  // чтобы они резолвились через реальные DNS, а не fake-ip
+  if (ruMode) {
+    buffer.writeln('    - "+.ru"');
+    buffer.writeln('    - "+.su"');
+    buffer.writeln('    - "+.рф"');
+  }
+  
   buffer.writeln('  default-nameserver:');
   buffer.writeln('    - 1.1.1.1');
   buffer.writeln('    - 8.8.8.8');
+  
+  // В РФ-режиме используем nameserver-policy для российских доменов
+  if (ruMode) {
+    buffer.writeln('  nameserver-policy:');
+    buffer.writeln('    "+.ru": ["77.88.8.8", "77.88.8.1"]');
+    buffer.writeln('    "+.su": ["77.88.8.8", "77.88.8.1"]');
+    buffer.writeln('    "+.рф": ["77.88.8.8", "77.88.8.1"]');
+  }
+  
   buffer.writeln('  nameserver:');
   buffer.writeln('    - https://1.1.1.1/dns-query');
   buffer.writeln('    - https://dns.google/dns-query');
-  
-  // В РФ-режиме используем российские DNS для .ru/.su/.рф доменов
-  // (чтобы они резолвились через местные DNS и шли DIRECT)
-  if (ruMode) {
-    buffer.writeln('  nameserver-policy:');
-    buffer.writeln('    "+.ru": ["https://dns.yandex.ru/dns-query", "77.88.8.8"]');
-    buffer.writeln('    "+.su": ["https://dns.yandex.ru/dns-query", "77.88.8.8"]');
-    buffer.writeln('    "+.рф": ["https://dns.yandex.ru/dns-query", "77.88.8.8"]');
-  }
   buffer.writeln('');
 
   // TUN конфигурация (ключевая часть для VPN-режима)
+  // Агрессивный перехват всего трафика с автоматическим роутингом
   buffer.writeln('tun:');
   buffer.writeln('  enable: true');
   buffer.writeln('  stack: system');
   buffer.writeln('  auto-route: true');
   buffer.writeln('  auto-detect-interface: true');
+  buffer.writeln('  dns-hijack:');
+  buffer.writeln('    - any:53');
+  buffer.writeln('    - tcp://any:53');
+  buffer.writeln('  strict-route: true');
   buffer.writeln('');
 
   // Прокси (VLESS с Reality)
@@ -120,18 +136,19 @@ Future<String> buildClashConfig(
 
   // ==================== ПРАВИЛА МАРШРУТИЗАЦИИ ====================
   // КРИТИЧЕСКИ ВАЖНЫЙ ПОРЯДОК (Clash проверяет сверху вниз):
-  // 1. Исключения по процессам (приложения)
-  // 2. Исключения по доменам (сайты)
-  // 3. Локальные сети
-  // 4. РФ-режим (если включен)
+  // 1. Исключения по процессам (приложения) — ВЫСШИЙ ПРИОРИТЕТ
+  // 2. Исключения по доменам (сайты) — ВЫСШИЙ ПРИОРИТЕТ
+  // 3. Локальные сети (GEOIP,private)
+  // 4. РФ-режим (если включен): .ru/.su/.рф + GEOIP,RU + 2ip.ru
   // 5. MATCH,VLF (всё остальное через VPN)
   
   buffer.writeln('rules:');
   
   // ========== БЛОК 1: ИСКЛЮЧЕНИЯ ПО ПРИЛОЖЕНИЯМ ==========
   // Эти процессы идут DIRECT (минуя VPN) независимо от режима
+  // ВАЖНО: исключения ВСЕГДА стоят ПЕРВЫМИ, даже перед локальными сетями
   if (appExcl.isNotEmpty) {
-    buffer.writeln('  # --- Исключения: приложения ---');
+    buffer.writeln('  # --- Исключения: приложения (ВЫСШИЙ ПРИОРИТЕТ) ---');
     for (final proc in appExcl) {
       if (proc.trim().isNotEmpty) {
         buffer.writeln('  - PROCESS-NAME,$proc,DIRECT');
@@ -142,8 +159,9 @@ Future<String> buildClashConfig(
   
   // ========== БЛОК 2: ИСКЛЮЧЕНИЯ ПО ДОМЕНАМ ==========
   // Эти сайты идут DIRECT (минуя VPN) независимо от режима
+  // ВАЖНО: исключения ВСЕГДА стоят ПЕРВЫМИ, даже перед локальными сетями
   if (siteExcl.isNotEmpty) {
-    buffer.writeln('  # --- Исключения: домены ---');
+    buffer.writeln('  # --- Исключения: домены (ВЫСШИЙ ПРИОРИТЕТ) ---');
     for (final domain in siteExcl) {
       if (domain.trim().isNotEmpty) {
         buffer.writeln('  - DOMAIN-SUFFIX,$domain,DIRECT');

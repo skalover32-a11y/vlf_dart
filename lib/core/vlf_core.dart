@@ -163,21 +163,25 @@ class VlfCore {
   void addSiteExclusion(String domain) {
     exclusions.addSite(domain);
     _saveAll();
+    _restartIfRunning(); // Перезапуск для применения изменений
   }
 
   void removeSiteExclusion(int idx) {
     exclusions.removeSite(idx);
     _saveAll();
+    _restartIfRunning(); // Перезапуск для применения изменений
   }
 
   void addAppExclusion(String procName) {
     exclusions.addApp(procName);
     _saveAll();
+    _restartIfRunning(); // Перезапуск для применения изменений
   }
 
   void removeAppExclusion(int idx) {
     exclusions.removeApp(idx);
     _saveAll();
+    _restartIfRunning(); // Перезапуск для применения изменений
   }
 
   // Convenience async API for UI
@@ -231,6 +235,7 @@ class VlfCore {
   void setRuMode(bool enabled) {
     ruMode = enabled;
     _saveAll();
+    _restartIfRunning(); // Перезапуск для применения изменений режима
   }
 
   // --- Singbox control ---
@@ -383,6 +388,12 @@ class VlfCore {
 
   int get logLines => logger.lines;
 
+  /// История логов для предзагрузки в UI (не очищается при рестарте туннеля).
+  List<String> get logHistory => logger.history;
+
+  /// Очистить логи по явной команде пользователя.
+  void clearLogs() => logger.clear();
+
   bool get isRunning => singboxManager.isRunning;
 
   // Save current config and profiles to disk
@@ -396,6 +407,28 @@ class VlfCore {
     };
     configStore.saveGuiConfig(cfg);
     configStore.saveProfiles(profileManager.profiles);
+  }
+
+  /// Перезапуск туннеля при изменении конфигурации (режим, исключения)
+  void _restartIfRunning() {
+    if (isConnected.value) {
+      final idx = currentProfileIndex.value;
+      if (idx != null && idx >= 0 && idx < profileManager.profiles.length) {
+        // Асинхронный перезапуск (fire-and-forget)
+        Future(() async {
+          try {
+            final mode = ruMode ? 'RU' : 'GLOBAL';
+            logger.append('========== tunnel restarting ($mode) =========='"\n");
+            await stopTunnel();
+            await Future.delayed(const Duration(milliseconds: 500));
+            await startTunnel(idx);
+            logger.append('========== tunnel restarted ($mode) =========='"\n");
+          } catch (e) {
+            logger.append('Ошибка при перезапуске туннеля: $e\n');
+          }
+        });
+      }
+    }
   }
   
 }

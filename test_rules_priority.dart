@@ -80,7 +80,7 @@ void main() async {
   
   // Проверка: РФ-правила должны быть ПОСЛЕ GEOIP,private
   final ruRule = lines2.skip(rulesStart2 + 1).firstWhere(
-    (l) => l.contains('DOMAIN-SUFFIX,ru,DIRECT'),
+    (l) => l.contains('DOMAIN-SUFFIX,ru,DIRECT-GROUP'),
     orElse: () => '',
   );
   final ruIndex = lines2.indexOf(ruRule);
@@ -107,7 +107,7 @@ void main() async {
   }
   
   // Проверка: РФ-правил НЕ должно быть в глобальном режиме
-  final hasRuRules = lines3.any((l) => l.contains('DOMAIN-SUFFIX,ru,DIRECT'));
+  final hasRuRules = lines3.any((l) => l.contains('DOMAIN-SUFFIX,ru,DIRECT-GROUP'));
   assert(!hasRuRules, 
     '❌ ОШИБКА: В глобальном режиме НЕ должно быть РФ-правил');
   
@@ -165,11 +165,11 @@ void main() async {
 
   print('\n=== ВСЕ ТЕСТЫ ПРОЙДЕНЫ ===\n');
   print('✅ Порядок правил корректный:');
-  print('  1. PROCESS-NAME (исключения по приложениям)');
-  print('  2. DOMAIN-SUFFIX (исключения по доменам)');
-  print('  3. GEOIP,private (локальные сети)');
-  print('  4. РФ-блок (если включен): .ru/.su/.рф + GEOIP,RU + 2ip.ru');
-  print('  5. MATCH,VLF (всё остальное через VPN)\n');
+  print('  1. PROCESS-NAME (исключения по приложениям) → DIRECT-GROUP');
+  print('  2. DOMAIN-SUFFIX (исключения по доменам) → DIRECT-GROUP');
+  print('  3. GEOIP,private (локальные сети) → DIRECT-GROUP');
+  print('  4. РФ-блок (если включен): .ru/.su/.рф + GEOIP,RU + 2ip.ru → DIRECT-GROUP');
+  print('  5. MATCH,FINAL-GROUP (всё остальное через VPN)\n');
   print('✅ DNS настроен корректно:');
   print('  - fake-ip-filter содержит российские домены в РФ-режиме');
   print('  - nameserver-policy использует российские DNS для .ru/.su/.рф\n');

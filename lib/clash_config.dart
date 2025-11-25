@@ -126,12 +126,30 @@ Future<String> buildClashConfig(
   buffer.writeln('    client-fingerprint: "$fp"');
   buffer.writeln('');
 
-  // Группы прокси
+  // Группы прокси (КРИТИЧЕСКИ ВАЖНО: Clash требует именованные группы для DIRECT)
   buffer.writeln('proxy-groups:');
-  buffer.writeln('  - name: "VLF"');
+  
+  // Группа для DIRECT-трафика (обход VPN)
+  buffer.writeln('  - name: "DIRECT-GROUP"');
+  buffer.writeln('    type: select');
+  buffer.writeln('    proxies:');
+  buffer.writeln('      - DIRECT');
+  buffer.writeln('');
+  
+  // Группа для VPN-прокси с fallback на DIRECT
+  buffer.writeln('  - name: "VLF-PROXY-GROUP"');
   buffer.writeln('    type: select');
   buffer.writeln('    proxies:');
   buffer.writeln('      - "VLF-PROXY"');
+  buffer.writeln('      - DIRECT');
+  buffer.writeln('');
+  
+  // Финальная группа для MATCH (весь остальной трафик)
+  buffer.writeln('  - name: "FINAL-GROUP"');
+  buffer.writeln('    type: select');
+  buffer.writeln('    proxies:');
+  buffer.writeln('      - "VLF-PROXY"');
+  buffer.writeln('      - DIRECT');
   buffer.writeln('');
 
   // ==================== ПРАВИЛА МАРШРУТИЗАЦИИ ====================
@@ -145,57 +163,56 @@ Future<String> buildClashConfig(
   buffer.writeln('rules:');
   
   // ========== БЛОК 1: ИСКЛЮЧЕНИЯ ПО ПРИЛОЖЕНИЯМ ==========
-  // Эти процессы идут DIRECT (минуя VPN) независимо от режима
+  // Эти процессы идут через DIRECT-GROUP (минуя VPN) независимо от режима
   // ВАЖНО: исключения ВСЕГДА стоят ПЕРВЫМИ, даже перед локальными сетями
   if (appExcl.isNotEmpty) {
     buffer.writeln('  # --- Исключения: приложения (ВЫСШИЙ ПРИОРИТЕТ) ---');
     for (final proc in appExcl) {
       if (proc.trim().isNotEmpty) {
-        buffer.writeln('  - PROCESS-NAME,$proc,DIRECT');
+        buffer.writeln('  - PROCESS-NAME,$proc,DIRECT-GROUP');
       }
     }
     buffer.writeln('');
   }
   
   // ========== БЛОК 2: ИСКЛЮЧЕНИЯ ПО ДОМЕНАМ ==========
-  // Эти сайты идут DIRECT (минуя VPN) независимо от режима
+  // Эти сайты идут через DIRECT-GROUP (минуя VPN) независимо от режима
   // ВАЖНО: исключения ВСЕГДА стоят ПЕРВЫМИ, даже перед локальными сетями
   if (siteExcl.isNotEmpty) {
     buffer.writeln('  # --- Исключения: домены (ВЫСШИЙ ПРИОРИТЕТ) ---');
     for (final domain in siteExcl) {
       if (domain.trim().isNotEmpty) {
-        buffer.writeln('  - DOMAIN-SUFFIX,$domain,DIRECT');
+        buffer.writeln('  - DOMAIN-SUFFIX,$domain,DIRECT-GROUP');
       }
     }
     buffer.writeln('');
   }
   
   // ========== БЛОК 3: ЛОКАЛЬНЫЕ СЕТИ ==========
-  // Локальный/приватный трафик ВСЕГДА идёт напрямую
+  // Локальный/приватный трафик ВСЕГДА идёт через DIRECT-GROUP
   buffer.writeln('  # --- Локальные сети ---');
-  buffer.writeln('  - GEOIP,private,DIRECT,no-resolve');
+  buffer.writeln('  - GEOIP,private,DIRECT-GROUP,no-resolve');
   buffer.writeln('');
   
   // ========== БЛОК 4: РЕЖИМ РФ (если включен) ==========
   if (ruMode) {
-    // РФ-режим: российский трафик идёт DIRECT (в обход VPN)
-    // Логика повторяет старую Python-версию (sing-box)
+    // РФ-режим: российский трафик идёт через DIRECT-GROUP (в обход VPN)
     buffer.writeln('  # --- РФ-режим: российский трафик в обход VPN ---');
-    buffer.writeln('  - DOMAIN-SUFFIX,ru,DIRECT');
-    buffer.writeln('  - DOMAIN-SUFFIX,su,DIRECT');
-    buffer.writeln('  - DOMAIN-SUFFIX,рф,DIRECT');
-    buffer.writeln('  - GEOIP,RU,DIRECT,no-resolve');
+    buffer.writeln('  - DOMAIN-SUFFIX,ru,DIRECT-GROUP');
+    buffer.writeln('  - DOMAIN-SUFFIX,su,DIRECT-GROUP');
+    buffer.writeln('  - DOMAIN-SUFFIX,рф,DIRECT-GROUP');
+    buffer.writeln('  - GEOIP,RU,DIRECT-GROUP,no-resolve');
     
     // Добавляем 2ip.ru только если его нет в пользовательских исключениях
     if (!siteExcl.contains('2ip.ru')) {
-      buffer.writeln('  - DOMAIN-SUFFIX,2ip.ru,DIRECT');
+      buffer.writeln('  - DOMAIN-SUFFIX,2ip.ru,DIRECT-GROUP');
     }
     buffer.writeln('');
   }
   
   // ========== БЛОК 5: ВСЁ ОСТАЛЬНОЕ ЧЕРЕЗ VPN ==========
   buffer.writeln('  # --- Всё остальное через VPN ---');
-  buffer.writeln('  - MATCH,VLF');
+  buffer.writeln('  - MATCH,FINAL-GROUP');
 
   return buffer.toString();
 }

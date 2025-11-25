@@ -5,11 +5,10 @@ import 'dart:convert';
 import '../config_store.dart';
 import '../profile_manager.dart';
 import '../exclusions.dart';
-import '../singbox_manager.dart';
+import '../clash_manager.dart';
 import '../logger.dart';
 import 'package:flutter/foundation.dart';
 import '../subscription_decoder.dart';
-import '../singbox_config_clean.dart';
 
 /// Фасад, объединяющий core-модули для UI.
 
@@ -17,7 +16,7 @@ class VlfCore {
   final ConfigStore configStore;
   final ProfileManager profileManager;
   final Exclusions exclusions;
-  final SingboxManager singboxManager;
+  final ClashManager singboxManager;
   final Logger logger;
 
   bool ruMode;
@@ -55,9 +54,9 @@ class VlfCore {
       'app_exclusions': guiCfg['app_exclusions'] ?? [],
     });
 
-    final singMgr = SingboxManager();
+    final singMgr = ClashManager();
 
-    // logger: используем singboxManager.logger для единого потока логов
+    // logger: используем ClashManager.logger для единого потока логов
     final coreLogger = singMgr.logger;
 
     final core = VlfCore._(
@@ -345,32 +344,16 @@ class VlfCore {
   }
 
   /// Generate and write `config.json` and `config_debug.json` for a specific profile index.
+  /// Запись конфигурации для профиля (для Clash не требуется — генерируется при старте)
   Future<void> writeConfigForProfileIndex(int idx) async {
-    if (idx < 0 || idx >= profileManager.profiles.length) throw Exception('Profile index out of range');
-    final p = profileManager.profiles[idx];
-
-    // build config using existing generator
-    final cfg = await buildSingboxConfig(
-      p.url,
-      ruMode,
-      exclusions.siteExclusions,
-      exclusions.appExclusions,
-    );
-
-    final encoder = const JsonEncoder.withIndent('  ');
-    final jsonText = encoder.convert(cfg);
-
-    try {
-      final cfgPath = File('${configStore.baseDir.path}${Platform.pathSeparator}config.json');
-      await cfgPath.writeAsString(jsonText, flush: true);
-      logger.append('config.json сгенерирован для профиля "${p.name}".\n');
-      final debugFile = File('${configStore.baseDir.path}${Platform.pathSeparator}config_debug.json');
-      await debugFile.writeAsString(jsonText, flush: true);
-      logger.append('config_debug.json записан для проверки.\n');
-    } catch (e) {
-      logger.append('Ошибка при записи config.json: $e\n');
-      rethrow;
+    if (idx < 0 || idx >= profileManager.profiles.length) {
+      throw Exception('Profile index out of range');
     }
+    final p = profileManager.profiles[idx];
+    
+    // Для Clash Meta конфигурация генерируется при запуске ClashManager.start()
+    // Этот метод можно использовать для предварительной проверки конфига
+    logger.append('Конфигурация для "${p.name}" будет сгенерирована при запуске туннеля\n');
   }
 
   /// Ensure config for profile exists and open it in the platform default editor.

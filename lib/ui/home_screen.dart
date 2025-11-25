@@ -57,7 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Add profile from clipboard
-    Future<void> _handleAddFromClipboard() async {
+    Future<void> handleAddFromClipboard() async {
       setState(() => _isAddMenuOpen = false);
       try {
         final data = await Clipboard.getData(Clipboard.kTextPlain);
@@ -131,7 +131,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Add profile by link (prompt dialog)
-    Future<void> _handleAddByLink() async {
+    Future<void> handleAddByLink() async {
       setState(() => _isAddMenuOpen = false);
       final controller = TextEditingController();
       final result = await showDialog<bool>(
@@ -245,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     // Add profile through QR (image or camera)
-    Future<void> _handleAddByQr() async {
+    Future<void> handleAddByQr() async {
       setState(() => _isAddMenuOpen = false);
       final choice = await showDialog<String>(
         context: context,
@@ -323,14 +323,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     
 
-    String _normalizeExceptionMessage(Object e) {
+    String normalizeExceptionMessage(Object e) {
       var s = e.toString();
       const p = 'Exception: ';
       if (s.startsWith(p)) s = s.substring(p.length);
       return s;
     }
 
-    Future<void> _toggleConnection() async {
+    Future<void> toggleConnection() async {
       if (!core.isConnected.value) {
         final profiles = core.getProfiles();
         if (profiles.isEmpty) {
@@ -350,7 +350,7 @@ class _HomeScreenState extends State<HomeScreen> {
           }
           await core.connectWithProfile(selected);
         } catch (e) {
-          final msg = _normalizeExceptionMessage(e);
+          final msg = normalizeExceptionMessage(e);
           core.logger.append('Ошибка подключения: $msg\n');
           if (mounted) showAppSnackBar(context, msg);
           return;
@@ -359,12 +359,13 @@ class _HomeScreenState extends State<HomeScreen> {
         try {
           await core.disconnect();
         } catch (e) {
-          final msg = _normalizeExceptionMessage(e);
+          final msg = normalizeExceptionMessage(e);
           core.logger.append('Ошибка остановки: $msg\n');
-          if (mounted)
+          if (mounted) {
             ScaffoldMessenger.of(
               context,
             ).showSnackBar(SnackBar(content: Text(msg)));
+          }
         }
       }
     }
@@ -528,7 +529,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         builder: (context, connected, _) {
                                           return VlfCircleButton(
                                             isOn: connected,
-                                            onTap: _toggleConnection,
+                                            onTap: toggleConnection,
                                           );
                                         },
                                       ),
@@ -539,9 +540,23 @@ class _HomeScreenState extends State<HomeScreen> {
                                         child: IntrinsicWidth(
                                           child: RuModeButton(
                                             isEnabled: core.ruMode,
-                                            onTap: () {
+                                            onTap: () async {
+                                              final wasRunning = core.singboxManager.isRunningNotifier.value;
+                                              final currentProfileIdx = core.currentProfileIndex.value;
+                                              
+                                              // Останавливаем туннель если работает
+                                              if (wasRunning) {
+                                                await core.stopTunnel();
+                                              }
+                                              
+                                              // Меняем режим РФ
                                               core.setRuMode(!core.ruMode);
                                               setState(() {});
+                                              
+                                              // Перезапускаем туннель если работал
+                                              if (wasRunning && currentProfileIdx != null && currentProfileIdx >= 0) {
+                                                await core.startTunnel(currentProfileIdx);
+                                              }
                                             },
                                           ),
                                         ),
@@ -705,21 +720,21 @@ class _HomeScreenState extends State<HomeScreen> {
                                           icon: Icons.content_paste,
                                           text: 'Добавить из буфера',
                                           onTap: () {
-                                            _handleAddFromClipboard();
+                                            handleAddFromClipboard();
                                           },
                                         ),
                                         PopoverMenuItem(
                                           icon: Icons.link,
                                           text: 'Добавить ссылкой',
                                           onTap: () {
-                                            _handleAddByLink();
+                                            handleAddByLink();
                                           },
                                         ),
                                         PopoverMenuItem(
                                           icon: Icons.qr_code,
                                           text: 'Добавить через QR код',
                                           onTap: () {
-                                            _handleAddByQr();
+                                            handleAddByQr();
                                           },
                                         ),
                                         // Import removed: keep add menu focused on add-by actions

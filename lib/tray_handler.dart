@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:tray_manager/tray_manager.dart';
 import 'core/vlf_core.dart';
+import 'core/system_proxy.dart';
 
 /// Handles system tray interactions and window close events.
 /// When user closes the window, it hides to tray instead of exiting.
@@ -127,6 +128,10 @@ class TrayHandler with WindowListener, TrayListener {
     // Stop tunnel if running (same logic as Power button)
     try {
       await core.stopTunnel();
+    } catch (_) {}
+
+    try {
+      await SystemProxy.disableProxy();
     } catch (_) {}
 
     // Extra safety on Windows: force-kill mihomo if still alive

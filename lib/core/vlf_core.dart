@@ -11,6 +11,7 @@ import '../clash_config.dart';
 import 'package:flutter/foundation.dart';
 import '../subscription_decoder.dart';
 import 'vlf_work_mode.dart';
+import 'system_proxy.dart';
 
 /// Фасад, объединяющий core-модули для UI.
 
@@ -49,6 +50,8 @@ class VlfCore {
     final store = ConfigStore(dir);
 
     final guiCfg = store.loadGuiConfig();
+
+    await SystemProxy.restoreIfDirty();
 
     // profiles: ConfigStore.loadProfiles уже возвращает List<Profile>
     final profileMgr = ProfileManager();
@@ -168,6 +171,9 @@ class VlfCore {
   Future<void> dispose() async {
     try {
       await stopTunnel();
+    } catch (_) {}
+    try {
+      await SystemProxy.disableProxy();
     } catch (_) {}
     try {
       clashManager.logger.dispose();
@@ -346,6 +352,14 @@ class VlfCore {
     workMode.value = mode;
     _saveAll();
 
+    if (mode == VlfWorkMode.tun) {
+      try {
+        await SystemProxy.disableProxy();
+      } catch (e) {
+        logger.append('Не удалось отключить системный прокси: $e\n');
+      }
+    }
+
     if (wasConnected && profileIdx != null) {
       logger.append('Переключение режима: останавливаю туннель...\n');
       await stopTunnel();
@@ -374,10 +388,26 @@ class VlfCore {
       appExcl: exclusions.appExclusions,
       workMode: workMode.value, // Pass current work mode to ClashManager
     );
+
+    if (workMode.value == VlfWorkMode.proxy) {
+      try {
+        await SystemProxy.enableProxy(httpPort: 7890, socksPort: 7891);
+        logger.append('Системный прокси включён (HTTP 7890 / SOCKS 7891)\n');
+      } catch (e) {
+        logger.append('Ошибка включения системного прокси: $e\n');
+        await clashManager.stop();
+        rethrow;
+      }
+    }
   }
 
   Future<void> stopTunnel() async {
     await clashManager.stop();
+    try {
+      await SystemProxy.disableProxy();
+    } catch (e) {
+      logger.append('Ошибка отключения системного прокси: $e\n');
+    }
   }
 
   Future<String> getIp() => clashManager.updateIp();

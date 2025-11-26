@@ -351,6 +351,7 @@ class VlfCore {
 
     workMode.value = mode;
     _saveAll();
+    logger.append('Режим установлен: ${mode.displayName}\n');
 
     if (mode == VlfWorkMode.tun) {
       try {
@@ -380,16 +381,18 @@ class VlfCore {
     }
 
     final p = profileManager.profiles[profileIdx];
+    final mode = workMode.value;
+    logger.append('Запуск туннеля в режиме ${mode.displayName}\n');
     await clashManager.start(
       p.url,
       Directory(configStore.baseDir.path),
       ruMode: ruMode,
       siteExcl: exclusions.siteExclusions,
       appExcl: exclusions.appExclusions,
-      workMode: workMode.value, // Pass current work mode to ClashManager
+      workMode: mode,
     );
 
-    if (workMode.value == VlfWorkMode.proxy) {
+    if (mode == VlfWorkMode.proxy) {
       try {
         await SystemProxy.enableProxy(httpPort: 7890, socksPort: 7891);
         logger.append('Системный прокси включён (HTTP 7890 / SOCKS 7891)\n');
@@ -397,6 +400,12 @@ class VlfCore {
         logger.append('Ошибка включения системного прокси: $e\n');
         await clashManager.stop();
         rethrow;
+      }
+    } else {
+      try {
+        await SystemProxy.disableProxy();
+      } catch (e) {
+        logger.append('Ошибка отключения системного прокси: $e\n');
       }
     }
   }

@@ -379,19 +379,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              // Show proxy info when in PROXY mode
-                              ValueListenableBuilder<VlfWorkMode>(
-                                valueListenable: core.workMode,
-                                builder: (context, mode, _) {
-                                  if (mode == VlfWorkMode.proxy) {
-                                    return const Padding(
-                                      padding: EdgeInsets.only(bottom: 16),
-                                      child: ProxyModeInfo(),
-                                    );
-                                  }
-                                  return const SizedBox.shrink();
-                                },
-                              ),
                               StatusBlock(core: core),
                               const SizedBox(height: 24),
                               const FooterLinks(),

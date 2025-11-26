@@ -419,6 +419,24 @@ class VlfCore {
     return false;
   }
 
+  Future<void> restartElevated() async {
+    try {
+      final exePath = Platform.resolvedExecutable;
+      final args = <String>[]; // relaunch without args
+      final ps = [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        'Start-Process -FilePath "' + exePath.replaceAll('"', '""') + '" -ArgumentList "' + args.join(' ') + '" -Verb RunAs'
+      ];
+      await Process.start('powershell', ps);
+      // Exit current process to allow elevated instance to take over
+      exit(0);
+    } catch (e) {
+      logger.append('\nНе удалось перезапустить с правами администратора: $e\n');
+    }
+  }
+
     if (mode == VlfWorkMode.proxy) {
       try {
         await SystemProxy.enableProxy(httpPort: 7890, socksPort: 7891);

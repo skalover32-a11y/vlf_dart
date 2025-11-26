@@ -6,6 +6,7 @@ import 'clash_config.dart';
 import 'subscription_decoder.dart';
 import 'logger.dart';
 import 'package:flutter/foundation.dart';
+import 'core/vlf_work_mode.dart';
 
 /// Менеджер процесса Clash Meta (mihomo) для управления VPN-туннелем.
 /// API аналогичен SingboxManager для упрощения интеграции.
@@ -32,12 +33,14 @@ class ClashManager {
   ///   * true (РФ-РЕЖИМ): российский трафик (RU GeoIP) в обход VPN, остальное через VPN
   /// [siteExcl] — список доменов для исключения из VPN (DIRECT)
   /// [appExcl] — список процессов для исключения из VPN (DIRECT)
+  /// [workMode] — режим работы туннеля (TUN или PROXY)
   Future<void> start(
     String profileUrl,
     Directory baseDir, {
     bool ruMode = false, // ГЛОБАЛЬНЫЙ режим по умолчанию
     List<String> siteExcl = const [],
     List<String> appExcl = const [],
+    VlfWorkMode workMode = VlfWorkMode.tun, // TUN по умолчанию
   }) async {
     // 1. Извлекаем VLESS из подписки
     String vless = '';
@@ -71,19 +74,29 @@ class ClashManager {
     );
 
     final modeLabel = ruMode ? 'RU' : 'GLOBAL';
+    final workModeLabel = workMode.displayName;
     logger.append(
-      'Clash config mode=$modeLabel rules=${routingPlan.rules.length} '
+      'Clash config mode=$modeLabel/$workModeLabel rules=${routingPlan.rules.length} '
       'apps=${routingPlan.appCount} sites=${routingPlan.domainCount} '
       'ruRules=${routingPlan.ruCount}\n',
     );
 
-    final yamlContent = await buildClashConfig(
-      vless,
-      ruMode,
-      siteExcl,
-      appExcl,
-      routingPlan: routingPlan,
-    );
+    // Generate config based on work mode
+    final yamlContent = workMode == VlfWorkMode.proxy
+        ? await buildClashConfigProxy(
+            vless,
+            ruMode,
+            siteExcl,
+            appExcl,
+            routingPlan: routingPlan,
+          )
+        : await buildClashConfig(
+            vless,
+            ruMode,
+            siteExcl,
+            appExcl,
+            routingPlan: routingPlan,
+          );
 
     await cfgPath.writeAsString(yamlContent, flush: true);
     logger.append('config.yaml сгенерирован\n');
@@ -281,6 +294,14 @@ class ClashManager {
         try {
           await p.exitCode.timeout(const Duration(seconds: 2));
         } catch (_) {}
+
+        // Windows fallback: иногда процесс упрямый — добьём taskkill
+        if (Platform.isWindows) {
+          try {
+            await Process.run('taskkill', ['/PID', p.pid.toString(), '/T', '/F'])
+                .timeout(const Duration(seconds: 2));
+          } catch (_) {}
+        }
       }
     } catch (_) {}
 

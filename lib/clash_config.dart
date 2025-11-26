@@ -1,4 +1,5 @@
 import 'package:meta/meta.dart';
+import 'core/vlf_work_mode.dart';
 
 /// Имя группы DIRECT по умолчанию.
 const String _directGroupName = 'DIRECT-GROUP';
@@ -252,6 +253,158 @@ List<String> buildRoutingRules({
     siteExcl: siteExcl,
     appExcl: appExcl,
   ).rules;
+}
+
+/// Генератор YAML-конфигурации для Clash Meta (mihomo) в PROXY режиме.
+///
+/// PROXY режим:
+/// - НЕ использует TUN интерфейс (не требует wintun.dll, не нужны права администратора)
+/// - Запускает HTTP/SOCKS прокси на localhost (mixed-port: 7890, socks-port: 7891)
+/// - Правила маршрутизации идентичны TUN режиму (РФ-режим, исключения работают так же)
+/// - Приложения должны быть настроены на использование прокси вручную
+///
+/// Параметры идентичны [buildClashConfig], но без TUN секции.
+Future<String> buildClashConfigProxy(
+  String vlessUrl,
+  bool ruMode,
+  List<String> siteExcl,
+  List<String> appExcl, {
+  RoutingRulesPlan? routingPlan,
+}) async {
+  final uri = Uri.parse(vlessUrl);
+  if (uri.scheme != 'vless') {
+    throw ArgumentError('Not a vless:// URL');
+  }
+
+  final uuid = uri.userInfo;
+  final server = uri.host;
+  final port = uri.hasPort ? uri.port : 443;
+
+  final q = uri.queryParameters;
+  String qget(String key, [String defaultVal = '']) => q[key] ?? defaultVal;
+
+  final flow = qget('flow', '');
+  final security = qget('security', '');
+  final fp = qget('fp', '') != '' ? qget('fp', '') : 'random';
+  final pbk = qget('pbk', '');
+  final sid = qget('sid', '');
+  final sni = qget('sni', '') != '' ? qget('sni', '') : server;
+
+  final buffer = StringBuffer();
+
+  // Базовые настройки Clash (PROXY режим: mixed-port вместо TUN)
+  buffer.writeln('port: 0');  // Отключаем отдельный HTTP порт
+  buffer.writeln('socks-port: 7891');
+  buffer.writeln('mixed-port: 7890');  // HTTP + SOCKS на одном порту
+  buffer.writeln('allow-lan: false');
+  buffer.writeln('mode: rule');
+  buffer.writeln('log-level: info');
+  buffer.writeln('ipv6: false');
+  buffer.writeln('');
+
+  // DNS конфигурация (идентична TUN режиму)
+  buffer.writeln('dns:');
+  buffer.writeln('  enable: true');
+  buffer.writeln('  prefer-h3: true');
+  buffer.writeln('  ipv6: false');
+  buffer.writeln('  default-nameserver:');
+  buffer.writeln('    - 8.8.8.8');
+  buffer.writeln('    - 1.1.1.1');
+  buffer.writeln('  nameserver:');
+  buffer.writeln('    - https://dns.google/dns-query');
+  buffer.writeln('    - https://1.1.1.1/dns-query');
+  buffer.writeln('  fallback:');
+  buffer.writeln('    - tls://9.9.9.9');
+  buffer.writeln('    - tls://8.8.4.4');
+  buffer.writeln('');
+
+  // PROXY режим: НЕТ TUN секции (главное отличие от TUN режима)
+
+  // Генерируем уникальное имя прокси на основе сервера
+  final proxyName = 'VLF-$server';
+
+  // Прокси (VLESS с Reality) - идентично TUN режиму
+  buffer.writeln('proxies:');
+  buffer.writeln('  - name: "$proxyName"');
+  buffer.writeln('    type: vless');
+  buffer.writeln('    server: "$server"');
+  buffer.writeln('    port: $port');
+  buffer.writeln('    uuid: "$uuid"');
+  if (flow.isNotEmpty) {
+    buffer.writeln('    flow: "$flow"');
+  }
+  buffer.writeln('    udp: true');
+  buffer.writeln('    tls: true');
+  buffer.writeln('    servername: "$sni"');
+  if (security == 'reality' && pbk.isNotEmpty) {
+    buffer.writeln('    reality-opts:');
+    buffer.writeln('      public-key: "$pbk"');
+    buffer.writeln('      short-id: "$sid"');
+  }
+  buffer.writeln('    client-fingerprint: "$fp"');
+  buffer.writeln('');
+
+  // Группы прокси - идентично TUN режиму
+  buffer.writeln('proxy-groups:');
+  buffer.writeln('  - name: "$_directGroupName"');
+  buffer.writeln('    type: select');
+  buffer.writeln('    proxies:');
+  buffer.writeln('      - DIRECT');
+  buffer.writeln('');
+  buffer.writeln('  - name: "$_vpnGroupName"');
+  buffer.writeln('    type: select');
+  buffer.writeln('    proxies:');
+  buffer.writeln('      - "$proxyName"');
+  buffer.writeln('      - DIRECT');
+  buffer.writeln('');
+
+  // Правила маршрутизации - идентично TUN режиму (переиспользуем общую функцию)
+  final plan =
+      routingPlan ??
+      buildRoutingRulesPlan(
+        ruMode: ruMode,
+        siteExcl: siteExcl,
+        appExcl: appExcl,
+      );
+  final rules = plan.rules;
+  final localRuleIndex = plan.appCount + plan.domainCount;
+  final ruStartIndex = localRuleIndex + 1;
+  final ruEndIndex = ruStartIndex + plan.ruCount;
+
+  buffer.writeln('rules:');
+
+  if (plan.appCount > 0) {
+    buffer.writeln('  # --- Исключения: приложения (ВЫСШИЙ ПРИОРИТЕТ) ---');
+    for (var i = 0; i < plan.appCount; i++) {
+      buffer.writeln('  - ${rules[i]}');
+    }
+    buffer.writeln('');
+  }
+
+  if (plan.domainCount > 0) {
+    buffer.writeln('  # --- Исключения: домены (ВЫСШИЙ ПРИОРИТЕТ) ---');
+    for (var i = plan.appCount; i < plan.appCount + plan.domainCount; i++) {
+      buffer.writeln('  - ${rules[i]}');
+    }
+    buffer.writeln('');
+  }
+
+  buffer.writeln('  # --- Локальные сети ---');
+  buffer.writeln('  - ${rules[localRuleIndex]}');
+  buffer.writeln('');
+
+  if (plan.ruCount > 0) {
+    buffer.writeln('  # --- РФ-режим: российский трафик в обход VPN ---');
+    for (var i = ruStartIndex; i < ruEndIndex; i++) {
+      buffer.writeln('  - ${rules[i]}');
+    }
+    buffer.writeln('');
+  }
+
+  buffer.writeln('  # --- Всё остальное через VPN ---');
+  buffer.writeln('  - ${rules.last}');
+
+  return buffer.toString();
 }
 
 List<String> _normalizeUnique(List<String> source) {

@@ -1,4 +1,40 @@
-# Miscellaneous
+# Flutter/Dart
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+.metadata
+pubspec.lock
+
+# Build outputs
+build/
+ios/
+android/
+
+# VSCode/IDE
+.vscode/
+.idea/
+*.iml
+
+# Generated artifacts
+linux/flutter/
+macos/Flutter/
+windows/flutter/
+
+# Local runtime/config
+config.yaml
+config_debug.yaml
+vlf_gui_config.json
+profiles.json
+
+# Release artifacts
+release/
+*.zip
+
+# Misc
+*.log
+*.tmp
+*.DS_Store# Miscellaneous
 *.class
 *.log
 *.pyc

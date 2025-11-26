@@ -10,6 +10,7 @@ import '../logger.dart';
 import '../clash_config.dart';
 import 'package:flutter/foundation.dart';
 import '../subscription_decoder.dart';
+import 'vlf_work_mode.dart';
 
 /// Фасад, объединяющий core-модули для UI.
 
@@ -24,6 +25,9 @@ class VlfCore {
   // ValueNotifier для подписки UI на состояние подключения
   final ValueNotifier<bool> isConnected;
 
+  // Work mode: TUN or PROXY
+  final ValueNotifier<VlfWorkMode> workMode;
+
   /// Индекс текущего выбранного профиля в `profileManager.profiles`.
   final ValueNotifier<int?> currentProfileIndex = ValueNotifier<int?>(null);
 
@@ -35,6 +39,7 @@ class VlfCore {
     this.logger,
     this.ruMode,
     this.isConnected,
+    this.workMode,
   );
 
   /// Инициализация фасада. `baseDir` — директория рядом с которой лежат
@@ -60,6 +65,10 @@ class VlfCore {
     // logger: используем ClashManager.logger для единого потока логов
     final coreLogger = clashMgr.logger;
 
+    // Load work mode from config (default to TUN for backward compatibility)
+    final workModeStr = guiCfg['work_mode'] as String?;
+    final initialWorkMode = workModeStr == 'proxy' ? VlfWorkMode.proxy : VlfWorkMode.tun;
+
     final core = VlfCore._(
       store,
       profileMgr,
@@ -68,6 +77,7 @@ class VlfCore {
       coreLogger,
       guiCfg['ru_mode'] == true,
       clashMgr.isRunningNotifier,
+      ValueNotifier<VlfWorkMode>(initialWorkMode),
     );
 
     // set default current profile index
@@ -324,8 +334,32 @@ class VlfCore {
     _restartIfRunning(); // Перезапуск для применения изменений режима
   }
 
+  // --- Work mode (TUN / PROXY) ---
+  /// Switch between TUN and PROXY modes.
+  /// If tunnel is running, it will be restarted with new mode.
+  Future<void> setWorkMode(VlfWorkMode mode) async {
+    if (workMode.value == mode) return;
+
+    final wasConnected = isConnected.value;
+    final profileIdx = currentProfileIndex.value;
+
+    workMode.value = mode;
+    _saveAll();
+
+    if (wasConnected && profileIdx != null) {
+      logger.append('Переключение режима: останавливаю туннель...\n');
+      await stopTunnel();
+      await Future.delayed(const Duration(milliseconds: 500));
+      logger.append('Запускаю туннель в режиме ${mode.displayName}...\n');
+      await startTunnel(profileIdx);
+    } else {
+      logger.append('Режим изменён на ${mode.displayName}\n');
+    }
+  }
+
   // --- Clash control ---
   /// Start Clash Meta using profile at `profileIdx` (must be valid index in profiles list).
+  /// Automatically uses current work mode (TUN or PROXY).
   Future<void> startTunnel(int profileIdx) async {
     if (profileIdx < 0 || profileIdx >= profileManager.profiles.length) {
       throw RangeError('profileIdx out of range');
@@ -338,6 +372,7 @@ class VlfCore {
       ruMode: ruMode,
       siteExcl: exclusions.siteExclusions,
       appExcl: exclusions.appExclusions,
+      workMode: workMode.value, // Pass current work mode to ClashManager
     );
   }
 
@@ -504,13 +539,22 @@ class VlfCore {
       appExcl: exclusions.appExclusions,
     );
 
-    final configYaml = await buildClashConfig(
-      profile.url,
-      ruMode,
-      exclusions.siteExclusions,
-      exclusions.appExclusions,
-      routingPlan: routingPlan,
-    );
+    // Generate config based on current work mode
+    final configYaml = workMode.value == VlfWorkMode.proxy
+        ? await buildClashConfigProxy(
+            profile.url,
+            ruMode,
+            exclusions.siteExclusions,
+            exclusions.appExclusions,
+            routingPlan: routingPlan,
+          )
+        : await buildClashConfig(
+            profile.url,
+            ruMode,
+            exclusions.siteExclusions,
+            exclusions.appExclusions,
+            routingPlan: routingPlan,
+          );
 
     final basePath = configStore.baseDir.path;
     final cfgPath = File('$basePath${Platform.pathSeparator}config.yaml');
@@ -564,7 +608,7 @@ class VlfCore {
     final cfg = {
       'profiles': profileManager.toJson()['profiles'],
       'ru_mode': ruMode,
-      // mode removed (always TUN)
+      'work_mode': workMode.value == VlfWorkMode.proxy ? 'proxy' : 'tun',
       'site_exclusions': exclusions.siteExclusions,
       'app_exclusions': exclusions.appExclusions,
     };

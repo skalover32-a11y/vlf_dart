@@ -2,17 +2,26 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'core/vlf_core.dart';
 import 'ui/home_screen.dart';
+import 'tray_handler.dart';
 
 // Window sizing on desktop
 import 'package:window_size/window_size.dart' as window_size;
 import 'package:window_manager/window_manager.dart';
+import 'package:tray_manager/tray_manager.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // Tray icon is initialized inside TrayHandler after core is ready
+  
   // On Windows, initialize window_manager and set a reasonable start size.
   if (Platform.isWindows) {
     try {
       await windowManager.ensureInitialized();
+      // Enable close interception as early as possible
+      try {
+        await windowManager.setPreventClose(true);
+      } catch (_) {}
 
       // start size slightly taller to give more vertical room for logs and content
       const startSize = Size(480, 980);
@@ -29,6 +38,8 @@ Future<void> main() async {
         await windowManager.setTitle('VLF tunnel');
         await windowManager.setSize(startSize);
         await windowManager.setMinimumSize(minSize);
+        // Ensure close interception is on
+        try { await windowManager.setPreventClose(true); } catch (_) {}
         // Prevent the window from being resized/larger than the start size.
         // This disables user resizing (so the UI won't stretch unexpectedly).
         await windowManager.setMaximumSize(startSize);
@@ -84,33 +95,143 @@ class MyApp extends StatelessWidget {
   }
 }
 
-class Bootstrap extends StatelessWidget {
+class Bootstrap extends StatefulWidget {
   const Bootstrap({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    // TODO: replace Directory.current with path from path_provider
-    final baseDir = Directory.current.path;
+  State<Bootstrap> createState() => _BootstrapState();
+}
 
-    return FutureBuilder<VlfCore>(
-      future: VlfCore.init(baseDir: baseDir),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        if (snapshot.hasError) {
-          return Scaffold(
-            body: Center(
-              child: Text('Initialization error: ${snapshot.error}'),
-            ),
-          );
-        }
-        final core = snapshot.data!;
-        return AppWindowWrapper(child: HomeScreen(core: core));
-      },
-    );
+class _BootstrapState extends State<Bootstrap> {
+  VlfCore? _core;
+  TrayHandler? _trayHandler;
+  _EarlySystemTray? _earlyInterceptor;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Attach an early close interceptor to guarantee hide-to-tray behavior
+    // even before core/tray initialization finishes.
+    if (Platform.isWindows) {
+      _earlyInterceptor = _EarlySystemTray();
+      windowManager.addListener(_earlyInterceptor!);
+      trayManager.addListener(_earlyInterceptor!);
+      _earlyInterceptor!._ensureEarlyTrayIcon();
+    }
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      // TODO: replace Directory.current with path from path_provider
+      final baseDir = Directory.current.path;
+      final core = await VlfCore.init(baseDir: baseDir);
+      
+      // Initialize tray handler
+      final trayHandler = TrayHandler(core);
+      await trayHandler.initialize();
+
+      setState(() {
+        _core = core;
+        _trayHandler = trayHandler;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    if (_earlyInterceptor != null) {
+      windowManager.removeListener(_earlyInterceptor!);
+      trayManager.removeListener(_earlyInterceptor!);
+      _earlyInterceptor = null;
+    }
+    _trayHandler?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_error != null) {
+      return Scaffold(
+        body: Center(
+          child: Text('Initialization error: $_error'),
+        ),
+      );
+    }
+    return AppWindowWrapper(child: HomeScreen(core: _core!));
+  }
+}
+
+// Minimal early system-tray + close interceptor to bridge app startup.
+class _EarlySystemTray with WindowListener, TrayListener {
+  @override
+  void onWindowClose() async {
+    try {
+      final prevent = await windowManager.isPreventClose();
+      if (prevent) {
+        await windowManager.hide();
+        await windowManager.setSkipTaskbar(true);
+      }
+    } catch (_) {
+      await windowManager.hide();
+    }
+  }
+
+  // Basic tray icon so user can restore the window even before core is ready.
+  Future<void> _ensureEarlyTrayIcon() async {
+    try {
+      final path = _resolveTrayIconPath();
+      if (path != null) {
+        await trayManager.setIcon(path);
+      }
+      await trayManager.setContextMenu(
+        Menu(items: [MenuItem(key: 'show', label: 'Открыть VLF tunnel')]),
+      );
+    } catch (_) {}
+  }
+
+  String? _resolveTrayIconPath() {
+    final base = Directory.current.path;
+    final sep = Platform.pathSeparator;
+    final candidates = <String>[
+      '$base${sep}assets${sep}tray_icon.ico',
+      '$base${sep}data${sep}flutter_assets${sep}assets${sep}tray_icon.ico',
+    ];
+    for (final p in candidates) {
+      try {
+        if (File(p).existsSync()) return p;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  @override
+  void onTrayIconMouseDown() {
+    windowManager.show();
+    windowManager.setSkipTaskbar(false);
+    windowManager.focus();
+  }
+
+  @override
+  void onTrayMenuItemClick(MenuItem menuItem) {
+    if (menuItem.key == 'show') {
+      windowManager.show();
+      windowManager.setSkipTaskbar(false);
+      windowManager.focus();
+    }
   }
 }
 

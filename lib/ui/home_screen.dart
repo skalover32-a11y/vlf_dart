@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/vlf_core.dart';
+import '../core/vlf_work_mode.dart';
 import '../qr_profile_loader.dart';
 import 'app_dialogs.dart';
 import 'exclusions_manager.dart';
@@ -17,6 +18,7 @@ import 'widgets/ru_mode_button.dart';
 import 'widgets/status_block.dart';
 import 'widgets/vlf_circle_button.dart';
 import 'widgets/vlf_header.dart';
+import 'widgets/work_mode_switch.dart';
 
 class HomeScreen extends StatefulWidget {
   final VlfCore core;
@@ -346,7 +348,50 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 16),
+                              // Work mode switch (TUN / PROXY)
+                              Center(
+                                child: ValueListenableBuilder<VlfWorkMode>(
+                                  valueListenable: core.workMode,
+                                  builder: (context, mode, _) {
+                                    return WorkModeSwitch(
+                                      currentMode: mode,
+                                      enabled: !_isBusy,
+                                      onModeChanged: (newMode) async {
+                                        if (_isBusy) return;
+                                        setState(() => _isBusy = true);
+                                        try {
+                                          await core.setWorkMode(newMode);
+                                          if (!mounted) return;
+                                          showAppSnackBar(
+                                            context,
+                                            'Режим изменён на ${newMode.displayName}',
+                                          );
+                                        } catch (e) {
+                                          if (!mounted) return;
+                                          showAppSnackBar(context, 'Ошибка: $e');
+                                        } finally {
+                                          if (mounted) setState(() => _isBusy = false);
+                                        }
+                                      },
+                                    );
+                                  },
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              // Show proxy info when in PROXY mode
+                              ValueListenableBuilder<VlfWorkMode>(
+                                valueListenable: core.workMode,
+                                builder: (context, mode, _) {
+                                  if (mode == VlfWorkMode.proxy) {
+                                    return const Padding(
+                                      padding: EdgeInsets.only(bottom: 16),
+                                      child: ProxyModeInfo(),
+                                    );
+                                  }
+                                  return const SizedBox.shrink();
+                                },
+                              ),
                               StatusBlock(core: core),
                               const SizedBox(height: 24),
                               const FooterLinks(),

@@ -35,10 +35,11 @@ void main() {
     expect(commands, isNotEmpty);
     final key = r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
     expect(commands[0], ['reg', 'add', key, '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '1', '/f']);
-    expect(commands[1][0], 'reg');
-    expect(commands[2][0], 'reg');
-    expect(commands[3], ['RunDll32.exe', 'wininet.dll,InternetSetOption']);
-    expect(commands.last[0], anyOf('RunDll32.exe', 'netsh'));
+    expect(commands[1], ['reg', 'add', key, '/v', 'ProxyServer', '/t', 'REG_SZ', '/d', '127.0.0.1:7890', '/f']);
+    expect(commands[2], ['reg', 'add', key, '/v', 'ProxyHttp1.1', '/t', 'REG_DWORD', '/d', '1', '/f']);
+    expect(commands[3], ['reg', 'add', key, '/v', 'ProxyOverride', '/t', 'REG_SZ', '/d', '<local>;localhost;127.0.0.1', '/f']);
+    expect(commands[4], ['RunDll32.exe', 'wininet.dll,InternetSetOption']);
+    expect(commands[5][0], 'netsh');
     expect(await stateFile.exists(), isTrue);
   });
 
@@ -51,6 +52,7 @@ void main() {
     final key = r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
     expect(commands.first, ['reg', 'add', key, '/v', 'ProxyEnable', '/t', 'REG_DWORD', '/d', '0', '/f']);
     expect(commands.any((c) => c.first == 'RunDll32.exe'), isTrue);
+    expect(commands.any((c) => c.first == 'netsh'), isTrue);
     expect(await stateFile.exists(), isFalse);
   });
 

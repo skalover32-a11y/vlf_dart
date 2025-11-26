@@ -110,8 +110,7 @@ class SystemProxy {
       '/f',
     ]);
 
-    final proxyServer =
-        'http=127.0.0.1:$httpPort;https=127.0.0.1:$httpPort;socks=127.0.0.1:$socksPort';
+    final proxyHost = '127.0.0.1:$httpPort';
     await _run('reg', [
       'add',
       key,
@@ -120,7 +119,19 @@ class SystemProxy {
       '/t',
       'REG_SZ',
       '/d',
-      proxyServer,
+      proxyHost,
+      '/f',
+    ]);
+
+    await _runOptional('reg', [
+      'add',
+      key,
+      '/v',
+      'ProxyHttp1.1',
+      '/t',
+      'REG_DWORD',
+      '/d',
+      '1',
       '/f',
     ]);
 
@@ -137,7 +148,17 @@ class SystemProxy {
     ]);
 
     await _run('RunDll32.exe', ['wininet.dll,InternetSetOption']);
-    await _runOptional('netsh', ['winhttp', 'import', 'proxy', 'source=ie']);
+
+    final netshServer =
+        'proxy-server="http=$proxyHost;https=$proxyHost;socks=127.0.0.1:$socksPort"';
+    const bypass = 'bypass-list="localhost;127.0.0.1"';
+    await _runOptional('netsh', [
+      'winhttp',
+      'set',
+      'proxy',
+      netshServer,
+      bypass,
+    ]);
   }
 
   static Future<void> _disableWindows() async {

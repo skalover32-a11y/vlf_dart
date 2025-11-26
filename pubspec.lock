@@ -137,7 +137,7 @@ packages:
     source: sdk
     version: "0.0.0"
   http:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: http
       sha256: "5895291c13fa8a3bd82e76d5627f69e0d85ca6a30dcac95c4ea19a5d555879c2"
@@ -153,7 +153,7 @@ packages:
     source: hosted
     version: "4.1.2"
   image:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: image
       sha256: "4e973fcf4caae1a4be2fa0a13157aa38a8f9cb049db6529aa00b4d71abc4d928"
@@ -389,6 +389,13 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "2.2.0"
+  vlf_core:
+    dependency: "direct main"
+    description:
+      path: "packages/vlf-core"
+      relative: true
+    source: path
+    version: "0.1.0"
   vm_service:
     dependency: transitive
     description:
@@ -430,7 +437,7 @@ packages:
     source: hosted
     version: "6.6.1"
   zxing2:
-    dependency: "direct main"
+    dependency: transitive
     description:
       name: zxing2
       sha256: "2677c49a3b9ca9457cb1d294fd4bd5041cac6aab8cdb07b216ba4e98945c684f"

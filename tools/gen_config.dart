@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:vlf_dart/clash_config.dart';
+import 'package:vlf_core/vlf_core.dart' show buildClashConfig;
 
 /// Тестовый скрипт для генерации Clash Meta конфигурации.
 /// Генерирует config_test.yaml для проверки корректности настроек.

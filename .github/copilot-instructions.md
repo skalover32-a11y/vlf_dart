@@ -8,14 +8,13 @@ Flutter VPN client for Windows managing VLESS connections via **Clash Meta (miho
 ### Core Components
 - **`VlfCore`** (`lib/core/vlf_core.dart`): Main facade exposing `ConfigStore`, `ProfileManager`, `Exclusions`, `ClashManager`, and `Logger` to UI
 - **`ClashManager`** (`lib/clash_manager.dart`): Manages `mihomo.exe` subprocess lifecycle, generates `config.yaml`, monitors stdout/stderr
-- **`ConfigStore`** (`lib/config_store.dart`): JSON persistence for `vlf_gui_config.json` and `profiles.json`
-- **`ProfileManager`** (`lib/profile_manager.dart`): In-memory profile list with CRUD operations
+- **`vlf_core` package** (`packages/vlf-core/`): Pure Dart library exporting `ConfigStore`, `ProfileManager`, `Exclusions`, `Logger`, `VlfWorkMode`, config builders, subscription/QR utilities
 - **UI**: `lib/ui/home_screen.dart` + modular widgets in `lib/ui/widgets/`
 
 ### Configuration Pipeline
-1. User adds VLESS subscription URL (or scans QR code via `qr_profile_loader.dart`)
-2. `extractVlessFromAny()` in `subscription_decoder.dart` parses base64/plaintext to extract `vless://` URL
-3. `buildClashConfig()` in `clash_config.dart` generates YAML configuration with:
+1. User adds VLESS subscription URL (or scans QR code via `packages/vlf-core/lib/src/qr_profile_loader.dart`)
+2. `extractVlessFromAny()` in `packages/vlf-core/lib/src/subscription_decoder.dart` parses base64/plaintext to extract `vless://` URL
+3. `buildClashConfig()` in `packages/vlf-core/lib/src/clash_config.dart` generates YAML configuration with:
    - VLESS outbound proxy (supports REALITY TLS)
    - TUN inbound with auto-routing
    - Rule-based routing: ru_mode GeoIP, domain exclusions, process exclusions
@@ -142,8 +141,8 @@ Process.run('powershell', ['-Command', 'Invoke-WebRequest ...']);
 
 ## Key Files by Concern
 - **Architecture**: `lib/core/vlf_core.dart` (facade), `lib/clash_manager.dart` (process manager)
-- **Config generation**: `lib/clash_config.dart` (YAML builder)
-- **Subscription parsing**: `lib/subscription_decoder.dart`
+- **Config generation**: `packages/vlf-core/lib/src/clash_config.dart` (YAML builder exported via `vlf_core` package)
+- **Subscription parsing**: `packages/vlf-core/lib/src/subscription_decoder.dart`
 - **UI entry point**: `lib/main.dart`, `lib/ui/home_screen.dart`
 - **Build automation**: `tools/build_and_package.ps1`
 - **Window setup**: `lib/main.dart` (window_manager integration)

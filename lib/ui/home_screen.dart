@@ -3,10 +3,9 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:vlf_core/vlf_core.dart' show VlfWorkMode, VlfWorkModeExtension, decodeQrFromImage;
 
 import '../core/vlf_core.dart';
-import '../core/vlf_work_mode.dart';
-import '../qr_profile_loader.dart';
 import 'app_dialogs.dart';
 import 'exclusions_manager.dart';
 import 'logs_screen.dart';

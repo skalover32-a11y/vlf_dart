@@ -2,15 +2,10 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
 
-import '../config_store.dart';
-import '../profile_manager.dart';
-import '../exclusions.dart';
-import '../clash_manager.dart';
-import '../logger.dart';
-import '../clash_config.dart';
 import 'package:flutter/foundation.dart';
-import '../subscription_decoder.dart';
-import 'vlf_work_mode.dart';
+import 'package:vlf_core/vlf_core.dart';
+
+import '../clash_manager.dart';
 import 'system_proxy.dart';
 
 /// Фасад, объединяющий core-модули для UI.

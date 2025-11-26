@@ -1,0 +1,13 @@
+name: vlf_core
+version: 0.1.0
+publish_to: 'none'
+description: Core logic and utilities shared across VLF clients.
+
+environment:
+  sdk: ^3.9.2
+
+dependencies:
+  meta: ^1.11.0
+  http: ^0.13.6
+  image: ^4.0.17
+  zxing2: ^0.2.4

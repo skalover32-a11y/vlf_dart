@@ -2,11 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'clash_config.dart';
-import 'subscription_decoder.dart';
-import 'logger.dart';
 import 'package:flutter/foundation.dart';
-import 'core/vlf_work_mode.dart';
+import 'package:vlf_core/vlf_core.dart';
 
 /// Менеджер процесса Clash Meta (mihomo) для управления VPN-туннелем.
 /// API аналогичен SingboxManager для упрощения интеграции.

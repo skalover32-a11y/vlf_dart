@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vlf_dart/clash_config.dart';
-import 'package:vlf_dart/core/vlf_work_mode.dart';
+import 'package:vlf_core/vlf_core.dart';
 
 void main() {
   group('PROXY mode config generation', () {

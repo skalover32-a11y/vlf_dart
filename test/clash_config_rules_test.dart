@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vlf_dart/clash_config.dart';
+import 'package:vlf_core/vlf_core.dart';
 
 void main() {
   group('buildRoutingRules', () {

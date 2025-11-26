@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../core/vlf_work_mode.dart';
+import 'package:vlf_core/vlf_core.dart' show VlfWorkMode;
 
 /// Segmented control for switching between TUN and PROXY modes.
 /// Displays current mode and allows switching with visual feedback.

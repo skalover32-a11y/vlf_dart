@@ -2,16 +2,19 @@
   "profiles": [
     {
       "name": "vlfFIN-249717973@bot",
-      "url": "vless://cc0bf5d6-f57d-4969-ae07-5954b5aeac64@troynichek-live.ru:10745?encryption=none&flow=xtls-rprx-vision&fp=random&pbk=8xDmZ6DBcNQg5c5DHbUDY6zvaBoe0tU2_hvToLFimw0&security=reality&sid=1c&sni=caprover.com&spx=%2FNr65IONQ3TKGWNj&type=tcp#vlfFIN-249717973@bot",
+      "url": "vless://cc0bf5d6-f57d-4969-ae07-5954b5aeac64@troynichek-live.ru:10745?encryption=none&flow=xtls-rprx-vision&fp=random&pbk=8xDmZ6DBcNQg5c5DHbUDY6zvaBoe0tU2_hvToLFimw0&security=reality&sid=e918d02370db&sni=caprover.com&spx=%2FLLWhMQo28EYpSF3&type=tcp#vlfFIN-249717973@bot",
       "ptype": "VLESS",
       "address": "",
       "remark": "",
       "source": "https://troynichek-live.ru/subvlftun/f761a39dd58742ba91f20462398edc25",
-      "last_updated_at": "2025-11-26T16:58:55.860632Z"
+      "last_updated_at": "2025-11-26T22:15:58.634024Z"
     }
   ],
   "ru_mode": false,
   "work_mode": "tun",
   "site_exclusions": [],
-  "app_exclusions": []
+  "app_exclusions": [
+    "steam.exe",
+    "dota2.exe"
+  ]
 }

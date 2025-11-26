@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:vlf_core/vlf_core.dart' show Profile;
+
 import '../../core/vlf_core.dart';
-import '../../profile_manager.dart';
 import '../app_dialogs.dart';
 
 class ProfileListSheet extends StatefulWidget {

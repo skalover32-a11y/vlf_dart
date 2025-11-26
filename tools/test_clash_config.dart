@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:vlf_dart/clash_config.dart';
+import 'package:vlf_core/vlf_core.dart' show buildClashConfig;
 
 /// Тестовый скрипт для проверки генерации Clash-конфигурации
 Future<void> main() async {

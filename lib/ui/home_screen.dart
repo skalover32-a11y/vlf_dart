@@ -238,6 +238,41 @@ class _HomeScreenState extends State<HomeScreen> {
                                 onMenuTap: onMenuTap,
                                 onAddTap: onAddTap,
                               ),
+                              // Admin-elevation warning banner
+                              ValueListenableBuilder<String?>(
+                                valueListenable: core.adminWarning,
+                                builder: (context, msg, _) {
+                                  if (msg == null) return const SizedBox.shrink();
+                                  return Padding(
+                                    padding: const EdgeInsets.only(top: 8),
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF1E1E1E),
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: const Color(0xFF3A3A3A)),
+                                      ),
+                                      padding: const EdgeInsets.all(12),
+                                      child: Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          const Icon(Icons.warning_amber_rounded, color: Color(0xFFFFC107)),
+                                          const SizedBox(width: 10),
+                                          Expanded(
+                                            child: Text(
+                                              msg,
+                                              style: const TextStyle(color: Colors.white70, fontSize: 13),
+                                            ),
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.close, color: Colors.white54, size: 18),
+                                            onPressed: () => core.adminWarning.value = null,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                               const SizedBox(height: 12),
                               ProfileHeader(
                                 core: core,

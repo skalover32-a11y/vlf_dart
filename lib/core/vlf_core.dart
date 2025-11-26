@@ -31,6 +31,7 @@ class VlfCore {
 
   /// Индекс текущего выбранного профиля в `profileManager.profiles`.
   final ValueNotifier<int?> currentProfileIndex = ValueNotifier<int?>(null);
+  final ValueNotifier<String?> adminWarning = ValueNotifier<String?>(null);
 
   VlfCore._(
     this.configStore,
@@ -380,6 +381,17 @@ class VlfCore {
       throw RangeError('profileIdx out of range');
     }
 
+      // Windows-specific: require elevation for TUN
+      if (Platform.isWindows) {
+        final elevated = await _isProcessElevated();
+        if (!elevated) {
+          adminWarning.value =
+              'Для TUN режима нужны права администратора. Используйте ПРОКСИ режим или запустите программу от имени администратора.';
+          logger.append('\nТребуются права администратора для TUN. Запуск отменён.\n');
+          return;
+        }
+      }
+
     final p = profileManager.profiles[profileIdx];
     final mode = workMode.value;
     logger.append('Запуск туннеля в режиме ${mode.displayName}\n');
@@ -391,6 +403,21 @@ class VlfCore {
       appExcl: exclusions.appExclusions,
       workMode: mode,
     );
+  Future<bool> _isProcessElevated() async {
+    try {
+      final result = await Process.run('powershell', [
+        '-NoProfile',
+        '-NonInteractive',
+        '-Command',
+        '[Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent() | % { $_.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }'
+      ]);
+      if (result.exitCode == 0) {
+        final out = (result.stdout ?? '').toString().trim().toLowerCase();
+        return out == 'true';
+      }
+    } catch (_) {}
+    return false;
+  }
 
     if (mode == VlfWorkMode.proxy) {
       try {

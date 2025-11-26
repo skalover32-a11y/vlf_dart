@@ -43,3 +43,23 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# VLF VPN runtime and generated configs
+config.yaml
+config_debug.yaml
+config.json
+config_debug.json
+config_*.yaml
+config_*.json
+!vlf_gui_config.json
+profiles.json
+*.log
+*.exe
+*.dll
+*.zip
+singbox_*.txt
+tree.txt
+
+# Keep dev examples
+!dev/config_examples/*.yaml
+!dev/config_examples/*.json

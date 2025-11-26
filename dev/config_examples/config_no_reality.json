@@ -1,0 +1,78 @@
+{
+  "log": {
+    "level": "info",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "tag": "dns-direct",
+        "address": "1.1.1.1",
+        "address_strategy": "prefer_ipv4",
+        "detour": "direct"
+      }
+    ]
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "vlf_tun",
+      "mtu": 1500,
+      "inet4_address": "172.19.0.1/28",
+      "auto_route": true,
+      "strict_route": true,
+      "sniff": true
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "proxy-out",
+      "server": "troynichek-live.ru",
+      "server_port": 10745,
+      "uuid": "cc0bf5d6-f57d-4969-ae07-5954b5aeac64",
+      "network": "tcp",
+      "tls": {
+        "enabled": true,
+        "server_name": "www.caprover.com",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "random"
+        }
+      },
+      "flow": "xtls-rprx-vision"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "auto_detect_interface": true,
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "ip_cidr": [
+          "45.66.163.55/32"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "domain_suffix": [
+          "ru",
+          "su",
+          "рф"
+        ],
+        "outbound": "direct"
+      }
+    ],
+    "final": "proxy-out"
+  }
+}

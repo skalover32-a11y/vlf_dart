@@ -1,0 +1,73 @@
+port: 7890
+socks-port: 7891
+mixed-port: 0
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: false
+
+dns:
+  enabled: true
+  ipv6: false
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "*.lan"
+    - "localhost.ptlogin2.qq.com"
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+
+tun:
+  enable: true
+  stack: system
+  auto-route: true
+  auto-detect-interface: true
+  dns-hijack:
+    - any:53
+    - tcp://any:53
+  strict-route: true
+
+proxies:
+  - name: "VLF-PROXY"
+    type: vless
+    server: "troynichek-live.ru"
+    port: 10745
+    uuid: "cc0bf5d6-f57d-4969-ae07-5954b5aeac64"
+    flow: "xtls-rprx-vision"
+    udp: true
+    tls: true
+    servername: "www.microsoft.com"
+    reality-opts:
+      public-key: "jNXfkEqis9K4BVpJPPQWoYUY0hrait-eNp3i1wB5el0"
+      short-id: "d9b2eb16"
+    client-fingerprint: "chrome"
+
+proxy-groups:
+  - name: "DIRECT-GROUP"
+    type: select
+    proxies:
+      - DIRECT
+
+  - name: "VLF-PROXY-GROUP"
+    type: select
+    proxies:
+      - "VLF-PROXY"
+      - DIRECT
+
+  - name: "FINAL-GROUP"
+    type: select
+    proxies:
+      - "VLF-PROXY"
+      - DIRECT
+
+rules:
+  # --- Локальные сети ---
+  - GEOIP,private,DIRECT-GROUP,no-resolve
+
+  # --- Всё остальное через VPN ---
+  - MATCH,FINAL-GROUP

@@ -1,0 +1,57 @@
+port: 7890
+socks-port: 7891
+mixed-port: 0
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: false
+
+dns:
+  enabled: true
+  ipv6: false
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "*.lan"
+    - "localhost.ptlogin2.qq.com"
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+
+tun:
+  enable: true
+  stack: system
+  auto-route: true
+  auto-detect-interface: true
+
+proxies:
+  - name: "VLF-PROXY"
+    type: vless
+    server: "troynichek-live.ru"
+    port: 10745
+    uuid: "cc0bf5d6-f57d-4969-ae07-5954b5aeac64"
+    flow: "xtls-rprx-vision"
+    udp: true
+    tls: true
+    servername: "caprover.com"
+    reality-opts:
+      public-key: "8xDmZ6DBcNQg5c5DHbUDY6zvaBoe0tU2_hvToLFimw0"
+      short-id: "7d69ea50"
+    client-fingerprint: "random"
+
+proxy-groups:
+  - name: "VLF"
+    type: select
+    proxies:
+      - "VLF-PROXY"
+
+rules:
+  # --- Локальные сети ---
+  - GEOIP,private,DIRECT,no-resolve
+
+  # --- Всё остальное через VPN ---
+  - MATCH,VLF

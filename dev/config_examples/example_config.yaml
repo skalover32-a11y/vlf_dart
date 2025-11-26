@@ -1,0 +1,84 @@
+port: 7890
+socks-port: 7891
+mixed-port: 0
+allow-lan: false
+mode: rule
+log-level: info
+ipv6: false
+
+dns:
+  enabled: true
+  ipv6: false
+  listen: 0.0.0.0:1053
+  enhanced-mode: fake-ip
+  fake-ip-range: 198.18.0.1/16
+  fake-ip-filter:
+    - "*.lan"
+    - "localhost.ptlogin2.qq.com"
+    - "+.ru"
+    - "+.su"
+    - "+.рф"
+  default-nameserver:
+    - 1.1.1.1
+    - 8.8.8.8
+  nameserver-policy:
+    "+.ru": ["77.88.8.8", "77.88.8.1"]
+    "+.su": ["77.88.8.8", "77.88.8.1"]
+    "+.рф": ["77.88.8.8", "77.88.8.1"]
+  nameserver:
+    - https://1.1.1.1/dns-query
+    - https://dns.google/dns-query
+
+tun:
+  enable: true
+  stack: system
+  auto-route: true
+  auto-detect-interface: true
+  dns-hijack:
+    - any:53
+    - tcp://any:53
+  strict-route: true
+
+proxies:
+  - name: "VLF-PROXY"
+    type: vless
+    server: "server.example.com"
+    port: 443
+    uuid: "test-uuid"
+    flow: "xtls-rprx-vision"
+    udp: true
+    tls: true
+    servername: "test.com"
+    reality-opts:
+      public-key: "testkey123"
+      short-id: "80"
+    client-fingerprint: "random"
+
+proxy-groups:
+  - name: "VLF"
+    type: select
+    proxies:
+      - "VLF-PROXY"
+
+rules:
+  # --- Исключения: приложения (ВЫСШИЙ ПРИОРИТЕТ) ---
+  - PROCESS-NAME,chrome.exe,DIRECT
+  - PROCESS-NAME,firefox.exe,DIRECT
+
+  # --- Исключения: домены (ВЫСШИЙ ПРИОРИТЕТ) ---
+  - DOMAIN-SUFFIX,google.com,DIRECT
+  - DOMAIN-SUFFIX,youtube.com,DIRECT
+
+  # --- Локальные сети ---
+  - GEOIP,private,DIRECT,no-resolve
+
+  # --- РФ-режим: российский трафик в обход VPN ---
+  - DOMAIN-SUFFIX,ru,DIRECT
+  - DOMAIN-SUFFIX,su,DIRECT
+  - DOMAIN-SUFFIX,рф,DIRECT
+  - GEOIP,RU,DIRECT,no-resolve
+  - DOMAIN-SUFFIX,2ip.ru,DIRECT
+
+  # --- Всё остальное через VPN ---
+  - MATCH,VLF
+

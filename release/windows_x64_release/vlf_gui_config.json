@@ -2,15 +2,15 @@
   "profiles": [
     {
       "name": "vlfFIN-249717973@bot",
-      "url": "vless://cc0bf5d6-f57d-4969-ae07-5954b5aeac64@troynichek-live.ru:10745?encryption=none&flow=xtls-rprx-vision&fp=random&pbk=8xDmZ6DBcNQg5c5DHbUDY6zvaBoe0tU2_hvToLFimw0&security=reality&sid=e631ee48b0bccb89&sni=www.caprover.com&spx=%2FITR933QwXTIELVA&type=tcp#vlfFIN-249717973@bot",
+      "url": "vless://cc0bf5d6-f57d-4969-ae07-5954b5aeac64@troynichek-live.ru:10745?encryption=none&flow=xtls-rprx-vision&fp=random&pbk=8xDmZ6DBcNQg5c5DHbUDY6zvaBoe0tU2_hvToLFimw0&security=reality&sid=1c&sni=caprover.com&spx=%2FNr65IONQ3TKGWNj&type=tcp#vlfFIN-249717973@bot",
       "ptype": "VLESS",
       "address": "",
       "remark": "",
       "source": "https://troynichek-live.ru/subvlftun/f761a39dd58742ba91f20462398edc25",
-      "last_updated_at": "2025-11-26T16:08:22.756390Z"
+      "last_updated_at": "2025-11-26T16:58:55.860632Z"
     }
   ],
-  "ru_mode": true,
+  "ru_mode": false,
   "work_mode": "tun",
   "site_exclusions": [],
   "app_exclusions": []

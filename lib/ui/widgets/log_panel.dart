@@ -17,38 +17,46 @@ class _LogPanelState extends State<LogPanel> {
   final List<String> _items = [];
   StreamSubscription<String>? _sub;
   final ScrollController _scrollController = ScrollController();
-  bool _autoScroll = true; // Автоскролл включен по умолчанию
+  bool _autoScroll = true; // внутренний флаг: прокручивать вниз только когда пользователь на нижней границе
   static const int _maxLogLines = 5000; // Буфер логов
+
+  bool get _isAtBottom {
+    if (!_scrollController.hasClients) return true;
+    final position = _scrollController.position;
+    final threshold = 32.0;
+    return position.pixels >= position.maxScrollExtent - threshold;
+  }
+
+  void _scrollToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+      _scrollController.animateTo(
+        _scrollController.position.maxScrollExtent,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    });
+  }
 
   @override
   void initState() {
     super.initState();
     // Предзагружаем историю логов, чтобы не терять ленту при рестартах/переключениях
     try {
-      _items.addAll(widget.core.logHistory);
+      for (final chunk in widget.core.logHistory) {
+        _appendChunk(chunk);
+      }
     } catch (_) {}
 
     // Подписка на поток логов (ВСЕГДА активна, без паузы)
     _sub = widget.core.logStream.listen((line) {
+      final shouldStick = _autoScroll && _isAtBottom;
       setState(() {
-        _items.add(line);
-        // Ограничение буфера: удаляем старые строки
-        if (_items.length > _maxLogLines) {
-          _items.removeAt(0);
-        }
+        _appendChunk(line);
       });
 
-      // Автоскролл к последней строке (если включен)
-      if (_autoScroll) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (_scrollController.hasClients) {
-            _scrollController.animateTo(
-              _scrollController.position.maxScrollExtent,
-              duration: const Duration(milliseconds: 200),
-              curve: Curves.easeOut,
-            );
-          }
-        });
+      if (shouldStick) {
+        _scrollToBottom();
       }
     });
 
@@ -58,21 +66,28 @@ class _LogPanelState extends State<LogPanel> {
 
   void _onScroll() {
     if (!_scrollController.hasClients) return;
-    
-    final position = _scrollController.position;
-    final isAtBottom = position.pixels >= position.maxScrollExtent - 50;
-    
-    // Включаем автоскролл, если пользователь вернулся вниз
-    if (isAtBottom && !_autoScroll) {
-      setState(() {
-        _autoScroll = true;
-      });
-    } 
-    // Отключаем автоскролл, если пользователь прокрутил вверх
-    else if (!isAtBottom && _autoScroll) {
-      setState(() {
-        _autoScroll = false;
-      });
+    final atBottom = _isAtBottom;
+    if (atBottom && !_autoScroll) {
+      setState(() => _autoScroll = true);
+    } else if (!atBottom && _autoScroll) {
+      setState(() => _autoScroll = false);
+    }
+  }
+
+  void _appendChunk(String chunk) {
+    if (chunk.isEmpty) return;
+
+    final normalized = chunk
+        .replaceAll('\r\n', '\n')
+        .replaceAll('\r', '\n');
+    final lines = normalized.split('\n');
+    for (final raw in lines) {
+      final line = raw.trimRight();
+      if (line.isEmpty) continue;
+      _items.add(line);
+      if (_items.length > _maxLogLines) {
+        _items.removeAt(0);
+      }
     }
   }
 
@@ -91,137 +106,35 @@ class _LogPanelState extends State<LogPanel> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
-              children: [
-                const Text(
-                  'Логи',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Индикатор автоскролла
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: _autoScroll ? const Color(0xFF10B981) : const Color(0xFF6B7280),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _autoScroll ? Icons.arrow_downward : Icons.pause,
-                        size: 14,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _autoScroll ? 'Авто' : 'Стоп',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Кнопка "Вниз" (появляется когда автоскролл выключен)
-                if (!_autoScroll)
-                  GestureDetector(
-                    onTap: () {
-                      if (_scrollController.hasClients) {
-                        _scrollController.animateTo(
-                          _scrollController.position.maxScrollExtent,
-                          duration: const Duration(milliseconds: 300),
-                          curve: Curves.easeOut,
-                        );
-                        setState(() {
-                          _autoScroll = true;
-                        });
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E2A36),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(
-                        Icons.vertical_align_bottom,
-                        size: 16,
-                        color: Color(0xFF9CA3AF),
-                      ),
-                    ),
-                  ),
-              ],
+            const Text(
+              'Логи',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
             ),
-            Row(
-              children: [
-                Text(
-                  '${_items.length} записей',
-                  style: const TextStyle(color: Color(0xFF9CA3AF)),
-                ),
-                const SizedBox(width: 12),
-                // Кнопка очистки логов
-                GestureDetector(
-                  onTap: () {
-                    widget.core.clearLogs();
-                    setState(() {
-                      _items.clear();
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E2A36),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Row(
-                      children: const [
-                        Icon(
-                          Icons.delete_outline,
-                          size: 14,
-                          color: Color(0xFF9CA3AF),
-                        ),
-                        SizedBox(width: 4),
-                        Text(
-                          'Очистить',
-                          style: TextStyle(
-                            color: Color(0xFF9CA3AF),
-                            fontSize: 11,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+            Text(
+              '${_items.length} записей',
+              style: const TextStyle(color: Color(0xFF9CA3AF)),
             ),
           ],
         ),
         const SizedBox(height: 8),
         // Контейнер с логами и скроллбаром
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF071426),
-            borderRadius: BorderRadius.circular(24),
-          ),
-          child: Scrollbar(
-            controller: _scrollController,
-            thumbVisibility: true,
-            thickness: 8.0,
-            radius: const Radius.circular(4),
-            child: SelectionArea(
-              child: ListView.builder(
+        Expanded(
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF071426),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: ScrollConfiguration(
+              behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+              child: SelectionArea(
+                child: ListView.builder(
                 controller: _scrollController,
-                reverse: false,
-                shrinkWrap: true,
-                physics: const AlwaysScrollableScrollPhysics(),
+                physics: const ClampingScrollPhysics(),
                 itemCount: _items.length,
                 itemBuilder: (context, index) {
                   final line = _items[index];
@@ -241,6 +154,7 @@ class _LogPanelState extends State<LogPanel> {
                   );
                 },
               ),
+            ),
             ),
           ),
         ),

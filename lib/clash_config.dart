@@ -1,17 +1,29 @@
+import 'package:meta/meta.dart';
+
+/// Имя группы DIRECT по умолчанию.
+const String _directGroupName = 'DIRECT-GROUP';
+
+/// Имя основной VPN-группы (используется в MATCH).
+const String _vpnGroupName = 'VLF-PROXY-GROUP';
+
+typedef RoutingRulesPlan = ({
+  List<String> rules,
+  int appCount,
+  int domainCount,
+  int ruCount,
+});
+
 /// Генератор YAML-конфигурации для Clash Meta (mihomo) из VLESS-подписки.
-/// 
+///
 /// Поддерживает только TUN-режим (без отдельного proxy-режима).
-/// 
+///
 /// ПОРЯДОК ПРАВИЛ МАРШРУТИЗАЦИИ (строго по приоритету):
 /// 1. Исключения по процессам (PROCESS-NAME,app.exe,DIRECT)
 /// 2. Исключения по доменам (DOMAIN-SUFFIX,site.com,DIRECT)
 /// 3. Локальные сети (GEOIP,private,DIRECT)
-/// 4. РФ-режим (если ruMode=true):
-///    - DOMAIN-SUFFIX,ru/su/рф,DIRECT
-///    - GEOIP,RU,DIRECT
-///    - DOMAIN-SUFFIX,2ip.ru,DIRECT
-/// 5. Всё остальное через VPN (MATCH,VLF)
-/// 
+/// 4. РФ-режим (если ruMode=true): .ru/.su/.рф/2ip.ru + GEOIP,RU
+/// 5. Всё остальное через VPN (MATCH,VLF-PROXY-GROUP)
+///
 /// [vlessUrl] - VLESS-подписка с параметрами Reality
 /// [ruMode] - РФ-режим (true = российский трафик в обход VPN)
 /// [siteExcl] - список доменов для исключения из VPN
@@ -20,8 +32,9 @@ Future<String> buildClashConfig(
   String vlessUrl,
   bool ruMode,
   List<String> siteExcl,
-  List<String> appExcl,
-) async {
+  List<String> appExcl, {
+  RoutingRulesPlan? routingPlan,
+}) async {
   final uri = Uri.parse(vlessUrl);
   if (uri.scheme != 'vless') {
     throw ArgumentError('Not a vless:// URL');
@@ -54,60 +67,39 @@ Future<String> buildClashConfig(
   buffer.writeln('ipv6: false');
   buffer.writeln('');
 
-  // DNS конфигурация
-  // КРИТИЧЕСКИ ВАЖНО: fake-ip режим необходим для корректной работы DOMAIN-SUFFIX правил
-  // НО он не должен мешать DIRECT-трафику (через fake-ip-filter)
+  // DNS конфигурация (рабочий вариант для Windows TUN)
   buffer.writeln('dns:');
-  buffer.writeln('  enabled: true');
+  buffer.writeln('  enable: true');
+  buffer.writeln('  prefer-h3: true');
   buffer.writeln('  ipv6: false');
-  buffer.writeln('  listen: 0.0.0.0:1053');
-  buffer.writeln('  enhanced-mode: fake-ip');
-  buffer.writeln('  fake-ip-range: 198.18.0.1/16');
-  buffer.writeln('  fake-ip-filter:');
-  buffer.writeln('    - "*.lan"');
-  buffer.writeln('    - "localhost.ptlogin2.qq.com"');
-  
-  // В РФ-режиме добавляем .ru/.su/.рф в fake-ip-filter
-  // чтобы они резолвились через реальные DNS, а не fake-ip
-  if (ruMode) {
-    buffer.writeln('    - "+.ru"');
-    buffer.writeln('    - "+.su"');
-    buffer.writeln('    - "+.рф"');
-  }
-  
   buffer.writeln('  default-nameserver:');
-  buffer.writeln('    - 1.1.1.1');
   buffer.writeln('    - 8.8.8.8');
-  
-  // В РФ-режиме используем nameserver-policy для российских доменов
-  if (ruMode) {
-    buffer.writeln('  nameserver-policy:');
-    buffer.writeln('    "+.ru": ["77.88.8.8", "77.88.8.1"]');
-    buffer.writeln('    "+.su": ["77.88.8.8", "77.88.8.1"]');
-    buffer.writeln('    "+.рф": ["77.88.8.8", "77.88.8.1"]');
-  }
-  
+  buffer.writeln('    - 1.1.1.1');
   buffer.writeln('  nameserver:');
-  buffer.writeln('    - https://1.1.1.1/dns-query');
   buffer.writeln('    - https://dns.google/dns-query');
+  buffer.writeln('    - https://1.1.1.1/dns-query');
+  buffer.writeln('  fallback:');
+  buffer.writeln('    - tls://9.9.9.9');
+  buffer.writeln('    - tls://8.8.4.4');
   buffer.writeln('');
 
   // TUN конфигурация (ключевая часть для VPN-режима)
-  // Агрессивный перехват всего трафика с автоматическим роутингом
   buffer.writeln('tun:');
   buffer.writeln('  enable: true');
-  buffer.writeln('  stack: system');
+  buffer.writeln('  stack: gvisor');
   buffer.writeln('  auto-route: true');
   buffer.writeln('  auto-detect-interface: true');
   buffer.writeln('  dns-hijack:');
-  buffer.writeln('    - any:53');
-  buffer.writeln('    - tcp://any:53');
-  buffer.writeln('  strict-route: true');
+  buffer.writeln('    - "198.18.0.2:53"');
+  buffer.writeln('  mtu: 9000');
   buffer.writeln('');
+
+  // Генерируем уникальное имя прокси на основе сервера
+  final proxyName = 'VLF-$server';
 
   // Прокси (VLESS с Reality)
   buffer.writeln('proxies:');
-  buffer.writeln('  - name: "VLF-PROXY"');
+  buffer.writeln('  - name: "$proxyName"');
   buffer.writeln('    type: vless');
   buffer.writeln('    server: "$server"');
   buffer.writeln('    port: $port');
@@ -128,91 +120,150 @@ Future<String> buildClashConfig(
 
   // Группы прокси (КРИТИЧЕСКИ ВАЖНО: Clash требует именованные группы для DIRECT)
   buffer.writeln('proxy-groups:');
-  
+
   // Группа для DIRECT-трафика (обход VPN)
-  buffer.writeln('  - name: "DIRECT-GROUP"');
+  buffer.writeln('  - name: "$_directGroupName"');
   buffer.writeln('    type: select');
   buffer.writeln('    proxies:');
   buffer.writeln('      - DIRECT');
   buffer.writeln('');
-  
+
   // Группа для VPN-прокси с fallback на DIRECT
-  buffer.writeln('  - name: "VLF-PROXY-GROUP"');
+  buffer.writeln('  - name: "$_vpnGroupName"');
   buffer.writeln('    type: select');
   buffer.writeln('    proxies:');
-  buffer.writeln('      - "VLF-PROXY"');
+  buffer.writeln('      - "$proxyName"');
   buffer.writeln('      - DIRECT');
   buffer.writeln('');
-  
-  // Финальная группа для MATCH (весь остальной трафик)
-  buffer.writeln('  - name: "FINAL-GROUP"');
-  buffer.writeln('    type: select');
-  buffer.writeln('    proxies:');
-  buffer.writeln('      - "VLF-PROXY"');
-  buffer.writeln('      - DIRECT');
-  buffer.writeln('');
+
+  final plan =
+      routingPlan ??
+      buildRoutingRulesPlan(
+        ruMode: ruMode,
+        siteExcl: siteExcl,
+        appExcl: appExcl,
+      );
+  final rules = plan.rules;
+  final localRuleIndex = plan.appCount + plan.domainCount;
+  final ruStartIndex = localRuleIndex + 1;
+  final ruEndIndex = ruStartIndex + plan.ruCount;
 
   // ==================== ПРАВИЛА МАРШРУТИЗАЦИИ ====================
   // КРИТИЧЕСКИ ВАЖНЫЙ ПОРЯДОК (Clash проверяет сверху вниз):
-  // 1. Исключения по процессам (приложения) — ВЫСШИЙ ПРИОРИТЕТ
-  // 2. Исключения по доменам (сайты) — ВЫСШИЙ ПРИОРИТЕТ
+  // 1. Исключения по процессам (приложения)
+  // 2. Исключения по доменам (сайты)
   // 3. Локальные сети (GEOIP,private)
-  // 4. РФ-режим (если включен): .ru/.su/.рф + GEOIP,RU + 2ip.ru
-  // 5. MATCH,VLF (всё остальное через VPN)
-  
+  // 4. РФ-блок (.ru/.su/.рф/2ip.ru + GEOIP,RU), если включен
+  // 5. MATCH,VLF-PROXY-GROUP (всё остальное через VPN)
   buffer.writeln('rules:');
-  
-  // ========== БЛОК 1: ИСКЛЮЧЕНИЯ ПО ПРИЛОЖЕНИЯМ ==========
-  // Эти процессы идут через DIRECT-GROUP (минуя VPN) независимо от режима
-  // ВАЖНО: исключения ВСЕГДА стоят ПЕРВЫМИ, даже перед локальными сетями
-  if (appExcl.isNotEmpty) {
+
+  if (plan.appCount > 0) {
     buffer.writeln('  # --- Исключения: приложения (ВЫСШИЙ ПРИОРИТЕТ) ---');
-    for (final proc in appExcl) {
-      if (proc.trim().isNotEmpty) {
-        buffer.writeln('  - PROCESS-NAME,$proc,DIRECT-GROUP');
-      }
+    for (var i = 0; i < plan.appCount; i++) {
+      buffer.writeln('  - ${rules[i]}');
     }
     buffer.writeln('');
   }
-  
-  // ========== БЛОК 2: ИСКЛЮЧЕНИЯ ПО ДОМЕНАМ ==========
-  // Эти сайты идут через DIRECT-GROUP (минуя VPN) независимо от режима
-  // ВАЖНО: исключения ВСЕГДА стоят ПЕРВЫМИ, даже перед локальными сетями
-  if (siteExcl.isNotEmpty) {
+
+  if (plan.domainCount > 0) {
     buffer.writeln('  # --- Исключения: домены (ВЫСШИЙ ПРИОРИТЕТ) ---');
-    for (final domain in siteExcl) {
-      if (domain.trim().isNotEmpty) {
-        buffer.writeln('  - DOMAIN-SUFFIX,$domain,DIRECT-GROUP');
-      }
+    for (var i = plan.appCount; i < plan.appCount + plan.domainCount; i++) {
+      buffer.writeln('  - ${rules[i]}');
     }
     buffer.writeln('');
   }
-  
-  // ========== БЛОК 3: ЛОКАЛЬНЫЕ СЕТИ ==========
-  // Локальный/приватный трафик ВСЕГДА идёт через DIRECT-GROUP
+
   buffer.writeln('  # --- Локальные сети ---');
-  buffer.writeln('  - GEOIP,private,DIRECT-GROUP,no-resolve');
+  buffer.writeln('  - ${rules[localRuleIndex]}');
   buffer.writeln('');
-  
-  // ========== БЛОК 4: РЕЖИМ РФ (если включен) ==========
-  if (ruMode) {
-    // РФ-режим: российский трафик идёт через DIRECT-GROUP (в обход VPN)
+
+  if (plan.ruCount > 0) {
     buffer.writeln('  # --- РФ-режим: российский трафик в обход VPN ---');
-    buffer.writeln('  - DOMAIN-SUFFIX,ru,DIRECT-GROUP');
-    buffer.writeln('  - DOMAIN-SUFFIX,su,DIRECT-GROUP');
-    buffer.writeln('  - DOMAIN-SUFFIX,рф,DIRECT-GROUP');
-    buffer.writeln('  - GEOIP,RU,DIRECT-GROUP,no-resolve');
-    
-    // Добавляем 2ip.ru только если его нет в пользовательских исключениях
-    if (!siteExcl.contains('2ip.ru')) {
-      buffer.writeln('  - DOMAIN-SUFFIX,2ip.ru,DIRECT-GROUP');
+    for (var i = ruStartIndex; i < ruEndIndex; i++) {
+      buffer.writeln('  - ${rules[i]}');
     }
     buffer.writeln('');
   }
-  
-  // ========== БЛОК 5: ВСЁ ОСТАЛЬНОЕ ЧЕРЕЗ VPN ==========
+
   buffer.writeln('  # --- Всё остальное через VPN ---');
-  buffer.writeln('  - MATCH,FINAL-GROUP');
+  buffer.writeln('  - ${rules.last}');
 
   return buffer.toString();
+}
+
+/// Возвращает план построения правил маршрутизации (для логики и тестов).
+RoutingRulesPlan buildRoutingRulesPlan({
+  required bool ruMode,
+  required List<String> siteExcl,
+  required List<String> appExcl,
+  String directGroupName = _directGroupName,
+  String vpnGroupName = _vpnGroupName,
+}) {
+  final normalizedApps = _normalizeUnique(appExcl);
+  final normalizedDomains = _normalizeUnique(siteExcl);
+
+  final apps = normalizedApps
+      .map((app) => 'PROCESS-NAME,$app,$directGroupName')
+      .toList();
+
+  final domains = normalizedDomains
+      .map((domain) => 'DOMAIN-SUFFIX,$domain,$directGroupName')
+      .toList();
+
+  final domainKeys = normalizedDomains.map((d) => d.toLowerCase()).toSet();
+
+  final ruRules = <String>[];
+  if (ruMode) {
+    const ruDomains = ['ru', 'su', 'рф'];
+    for (final tld in ruDomains) {
+      ruRules.add('DOMAIN-SUFFIX,$tld,$directGroupName');
+    }
+    if (!domainKeys.contains('2ip.ru')) {
+      ruRules.add('DOMAIN-SUFFIX,2ip.ru,$directGroupName');
+    }
+    ruRules.add('GEOIP,RU,$directGroupName,no-resolve');
+  }
+
+  final rules = <String>[
+    ...apps,
+    ...domains,
+    'GEOIP,private,$directGroupName,no-resolve',
+    ...ruRules,
+    'MATCH,$vpnGroupName',
+  ];
+
+  return (
+    rules: List<String>.unmodifiable(rules),
+    appCount: apps.length,
+    domainCount: domains.length,
+    ruCount: ruRules.length,
+  );
+}
+
+/// Плоский список правил (удобно использовать в тестах).
+@visibleForTesting
+List<String> buildRoutingRules({
+  required bool ruMode,
+  required List<String> siteExcl,
+  required List<String> appExcl,
+}) {
+  return buildRoutingRulesPlan(
+    ruMode: ruMode,
+    siteExcl: siteExcl,
+    appExcl: appExcl,
+  ).rules;
+}
+
+List<String> _normalizeUnique(List<String> source) {
+  final result = <String>[];
+  final seen = <String>{};
+  for (final raw in source) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) continue;
+    final key = trimmed.toLowerCase();
+    if (seen.add(key)) {
+      result.add(trimmed);
+    }
+  }
+  return result;
 }

@@ -14,7 +14,7 @@ class ClashManager {
   StreamSubscription<List<int>>? _stdoutSub;
   StreamSubscription<List<int>>? _stderrSub;
   final Logger logger = Logger();
-  
+
   /// Notifier для состояния работы mihomo (подписывайтесь из UI)
   final ValueNotifier<bool> isRunningNotifier = ValueNotifier<bool>(false);
 
@@ -55,26 +55,44 @@ class ClashManager {
     }
 
     // 2. Проверяем наличие mihomo.exe
-    final mihomoExe = File('${baseDir.path}${Platform.pathSeparator}mihomo.exe');
+    final mihomoExe = File(
+      '${baseDir.path}${Platform.pathSeparator}mihomo.exe',
+    );
     if (!mihomoExe.existsSync()) {
       throw FileSystemException('mihomo.exe не найден', mihomoExe.path);
     }
 
     // 3. Генерируем config.yaml
     final cfgPath = File('${baseDir.path}${Platform.pathSeparator}config.yaml');
+    final routingPlan = buildRoutingRulesPlan(
+      ruMode: ruMode,
+      siteExcl: siteExcl,
+      appExcl: appExcl,
+    );
+
+    final modeLabel = ruMode ? 'RU' : 'GLOBAL';
+    logger.append(
+      'Clash config mode=$modeLabel rules=${routingPlan.rules.length} '
+      'apps=${routingPlan.appCount} sites=${routingPlan.domainCount} '
+      'ruRules=${routingPlan.ruCount}\n',
+    );
+
     final yamlContent = await buildClashConfig(
       vless,
       ruMode,
       siteExcl,
       appExcl,
+      routingPlan: routingPlan,
     );
-    
+
     await cfgPath.writeAsString(yamlContent, flush: true);
     logger.append('config.yaml сгенерирован\n');
 
     // Debug: сохраняем копию для проверки
     try {
-      final debugFile = File('${baseDir.path}${Platform.pathSeparator}config_debug.yaml');
+      final debugFile = File(
+        '${baseDir.path}${Platform.pathSeparator}config_debug.yaml',
+      );
       await debugFile.writeAsString(yamlContent, flush: true);
       logger.append('config_debug.yaml записан для проверки\n');
     } catch (_) {}
@@ -132,7 +150,7 @@ class ClashManager {
         try {
           final text = utf8.decode(data);
           final lower = text.toLowerCase();
-          
+
           // Фильтруем шумные сообщения
           if (lower.contains('deprecated') || lower.contains('warning:')) {
             logger.append('[WARN] $text');
@@ -168,7 +186,7 @@ class ClashManager {
             stdoutDone.future.catchError((_) {}),
             stderrDone.future.catchError((_) {}),
           ]).timeout(const Duration(seconds: 5), onTimeout: () => <void>[]);
-          
+
           if (_stopping) {
             logger.append('\nClash остановлен пользователем (exitCode=$rc)\n');
           } else {
@@ -214,7 +232,9 @@ class ClashManager {
           }
           // Процесс жив и нет явных ошибок
           if (hasSeenOutput) {
-            logger.append('Clash запущен (подтверждение по активности логов)\n');
+            logger.append(
+              'Clash запущен (подтверждение по активности логов)\n',
+            );
           } else {
             logger.append('Clash запущен (без явной стартовой строки)\n');
           }
@@ -269,12 +289,12 @@ class ClashManager {
       await _stdoutSub?.cancel();
     } catch (_) {}
     _stdoutSub = null;
-    
+
     try {
       await _stderrSub?.cancel();
     } catch (_) {}
     _stderrSub = null;
-    
+
     _proc = null;
     isRunningNotifier.value = false;
     logger.append('Clash процесс полностью остановлен\n');
@@ -290,25 +310,23 @@ class ClashManager {
   Future<String> updateIp() async {
     if (Platform.isWindows) {
       try {
-        final result = await Process.run(
-          'powershell',
-          [
-            '-NoProfile',
-            '-Command',
-            r'(Invoke-WebRequest -Uri "https://api.ipify.org?format=text" -UseBasicParsing).Content.Trim()',
-          ],
-          runInShell: false,
-        ).timeout(const Duration(seconds: 10));
-        
+        final result = await Process.run('powershell', [
+          '-NoProfile',
+          '-Command',
+          r'(Invoke-WebRequest -Uri "https://api.ipify.org?format=text" -UseBasicParsing).Content.Trim()',
+        ], runInShell: false).timeout(const Duration(seconds: 10));
+
         if (result.exitCode == 0) {
           final ip = (result.stdout?.toString() ?? '').trim();
-          if (ip.isNotEmpty && !ip.contains('error') && !ip.contains('Exception')) {
+          if (ip.isNotEmpty &&
+              !ip.contains('error') &&
+              !ip.contains('Exception')) {
             return ip;
           }
         }
       } catch (_) {}
     }
-    
+
     // Fallback к прямому HttpClient
     try {
       final client = HttpClient();

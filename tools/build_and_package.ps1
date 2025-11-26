@@ -90,6 +90,26 @@ foreach ($dir in $candidateDirs) {
     }
 }
 
+# --- Release pruning -------------------------------------------------------
+# Keep only the binaries and assets required for distribution. All other files
+# (debug configs, json/yaml junk, docs, etc.) are removed to keep the archive
+# lean and avoid leaking user data.
+$allowedExactFiles = @('VLF_VPN.exe','mihomo.exe','wintun.dll','config.yaml')
+Get-ChildItem -LiteralPath $releaseDir -Force | ForEach-Object {
+    if ($_.PSIsContainer) {
+        if ($_.Name -ieq 'data') { return }
+        Write-Host "Removing extraneous directory: $($_.FullName)"
+        Remove-Item -LiteralPath $_.FullName -Recurse -Force
+        return
+    }
+
+    if ($allowedExactFiles -contains $_.Name) { return }
+    if ($_.Extension -ieq '.dll') { return }
+
+    Write-Host "Removing extraneous file: $($_.FullName)"
+    Remove-Item -LiteralPath $_.FullName -Force
+}
+
 Write-Host "Files in release folder:"
 Get-ChildItem -Path $releaseDir | ForEach-Object { Write-Host " - $($_.Name)" }
 

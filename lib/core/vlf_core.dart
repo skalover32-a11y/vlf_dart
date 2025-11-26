@@ -7,6 +7,7 @@ import '../profile_manager.dart';
 import '../exclusions.dart';
 import '../clash_manager.dart';
 import '../logger.dart';
+import '../clash_config.dart';
 import 'package:flutter/foundation.dart';
 import '../subscription_decoder.dart';
 
@@ -16,7 +17,7 @@ class VlfCore {
   final ConfigStore configStore;
   final ProfileManager profileManager;
   final Exclusions exclusions;
-  final ClashManager singboxManager;
+  final ClashManager clashManager;
   final Logger logger;
 
   bool ruMode;
@@ -30,7 +31,7 @@ class VlfCore {
     this.configStore,
     this.profileManager,
     this.exclusions,
-    this.singboxManager,
+    this.clashManager,
     this.logger,
     this.ruMode,
     this.isConnected,
@@ -54,19 +55,19 @@ class VlfCore {
       'app_exclusions': guiCfg['app_exclusions'] ?? [],
     });
 
-    final singMgr = ClashManager();
+    final clashMgr = ClashManager();
 
     // logger: используем ClashManager.logger для единого потока логов
-    final coreLogger = singMgr.logger;
+    final coreLogger = clashMgr.logger;
 
     final core = VlfCore._(
       store,
       profileMgr,
       excl,
-      singMgr,
+      clashMgr,
       coreLogger,
       guiCfg['ru_mode'] == true,
-      singMgr.isRunningNotifier,
+      clashMgr.isRunningNotifier,
     );
 
     // set default current profile index
@@ -94,13 +95,37 @@ class VlfCore {
     return profileManager.profiles[idx];
   }
 
-  void setCurrentProfileByIndex(int? idx) {
-    if (idx == null) {
-      currentProfileIndex.value = null;
-      return;
+  Future<void> setCurrentProfileByIndex(int? idx) async {
+    final prev = currentProfileIndex.value;
+    if (idx == prev) return;
+
+    if (idx != null) {
+      if (idx < 0 || idx >= profileManager.profiles.length) {
+        throw RangeError('profileIdx out of range');
+      }
     }
-    if (idx < 0 || idx >= profileManager.profiles.length) return;
+
+    final wasConnected = isConnected.value;
+    if (wasConnected) {
+      logger.append('Смена профиля: останавливаю текущий туннель...\n');
+      try {
+        await stopTunnel();
+      } catch (e) {
+        logger.append('Ошибка при остановке туннеля перед сменой профиля: $e\n');
+        rethrow;
+      }
+    }
+
     currentProfileIndex.value = idx;
+    _saveAll();
+
+    if (wasConnected) {
+      final name = idx != null ? profileManager.profiles[idx].name : 'не выбран';
+      logger.append(
+        'Профиль переключён на "$name". Запустите туннель вручную для применения.\n',
+      );
+    }
+
   }
 
   /// Parse arbitrary text (clipboard contents or user input) and add profile.
@@ -116,7 +141,12 @@ class VlfCore {
         final idx = profileManager.profiles.length + 1;
         name = 'Профиль $idx';
       }
-      final p = Profile(name, vless);
+      final p = Profile(
+        name,
+        vless,
+        source: text.trim(),
+        lastUpdatedAt: DateTime.now().toUtc(),
+      );
       addProfile(p);
       return p;
     } catch (e) {
@@ -130,13 +160,69 @@ class VlfCore {
       await stopTunnel();
     } catch (_) {}
     try {
-      singboxManager.logger.dispose();
+      clashManager.logger.dispose();
     } catch (_) {}
   }
 
   void editProfile(int idx, Profile p) {
     profileManager.editAt(idx, p);
     _saveAll();
+  }
+
+  Future<void> renameProfile(int index, String newName) async {
+    if (index < 0 || index >= profileManager.profiles.length) {
+      throw RangeError('profileIdx out of range');
+    }
+    final trimmed = newName.trim();
+    if (trimmed.isEmpty) {
+      throw Exception('Название профиля не может быть пустым');
+    }
+    final profile = profileManager.profiles[index];
+    profile.name = trimmed;
+    profileManager.editAt(index, profile);
+    _saveAll();
+    if (currentProfileIndex.value == index) {
+      currentProfileIndex.notifyListeners();
+    }
+  }
+
+  Future<void> updateProfileFromText({
+    required int index,
+    required String name,
+    required String rawText,
+  }) async {
+    if (index < 0 || index >= profileManager.profiles.length) {
+      throw RangeError('profileIdx out of range');
+    }
+    final trimmedRaw = rawText.trim();
+    if (trimmedRaw.isEmpty) {
+      throw Exception('Пустой текст подписки');
+    }
+    final parsed = await extractVlessFromAny(trimmedRaw);
+    final current = profileManager.profiles[index];
+    final newName = name.trim().isEmpty ? current.name : name.trim();
+
+    final updated = Profile(
+      newName,
+      parsed,
+      ptype: current.ptype,
+      address: current.address,
+      remark: current.remark,
+      source: trimmedRaw,
+      lastUpdatedAt: DateTime.now().toUtc(),
+    );
+
+    profileManager.editAt(index, updated);
+    _saveAll();
+    await _generateConfigFiles(profile: updated);
+
+    if (currentProfileIndex.value == index && isConnected.value) {
+      logger.append(
+        'Активный профиль обновлён — перезапустите туннель для применения новых параметров\n',
+      );
+    } else {
+      logger.append('Профиль "$newName" обновлён\n');
+    }
   }
 
   void removeProfile(int idx) {
@@ -238,15 +324,15 @@ class VlfCore {
     _restartIfRunning(); // Перезапуск для применения изменений режима
   }
 
-  // --- Singbox control ---
-  /// Start sing-box using profile at `profileIdx` (must be valid index in profiles list).
+  // --- Clash control ---
+  /// Start Clash Meta using profile at `profileIdx` (must be valid index in profiles list).
   Future<void> startTunnel(int profileIdx) async {
     if (profileIdx < 0 || profileIdx >= profileManager.profiles.length) {
       throw RangeError('profileIdx out of range');
     }
 
     final p = profileManager.profiles[profileIdx];
-    await singboxManager.start(
+    await clashManager.start(
       p.url,
       Directory(configStore.baseDir.path),
       ruMode: ruMode,
@@ -256,10 +342,10 @@ class VlfCore {
   }
 
   Future<void> stopTunnel() async {
-    await singboxManager.stop();
+    await clashManager.stop();
   }
 
-  Future<String> getIp() => singboxManager.updateIp();
+  Future<String> getIp() => clashManager.updateIp();
 
   /// Получить строковое представление геолокации по текущему IP.
   /// Возвращает '-' при ошибке или если информации нет.
@@ -352,13 +438,90 @@ class VlfCore {
   /// Запись конфигурации для профиля (для Clash не требуется — генерируется при старте)
   Future<void> writeConfigForProfileIndex(int idx) async {
     if (idx < 0 || idx >= profileManager.profiles.length) {
-      throw Exception('Profile index out of range');
+      throw RangeError('profileIdx out of range');
     }
-    final p = profileManager.profiles[idx];
-    
-    // Для Clash Meta конфигурация генерируется при запуске ClashManager.start()
-    // Этот метод можно использовать для предварительной проверки конфига
-    logger.append('Конфигурация для "${p.name}" будет сгенерирована при запуске туннеля\n');
+    final profile = profileManager.profiles[idx];
+    await _generateConfigFiles(profile: profile);
+    logger.append(
+      'config.yaml обновлён для профиля "${profile.name}" (ручное обновление)\n',
+    );
+  }
+
+  Future<void> refreshCurrentProfile() async {
+    final idx = currentProfileIndex.value;
+    if (idx == null) {
+      throw Exception('Нет активного профиля');
+    }
+    await refreshProfileByIndex(idx);
+  }
+
+  Future<void> refreshProfileByIndex(int idx) async {
+    if (idx < 0 || idx >= profileManager.profiles.length) {
+      throw RangeError('profileIdx out of range');
+    }
+
+    var profile = profileManager.profiles[idx];
+    final source = profile.source.trim();
+    final timestamp = DateTime.now().toUtc();
+
+    if (source.isNotEmpty) {
+      logger.append('Обновляю подписку профиля "${profile.name}"...\n');
+      final updatedVless = await extractVlessFromAny(source);
+      if (updatedVless != profile.url) {
+        profile = Profile(
+          profile.name,
+          updatedVless,
+          ptype: profile.ptype,
+          address: profile.address,
+          remark: profile.remark,
+          source: profile.source,
+          lastUpdatedAt: timestamp,
+        );
+        profileManager.editAt(idx, profile);
+        logger.append('Новая конфигурация подписки сохранена\n');
+      } else {
+        profile.lastUpdatedAt = timestamp;
+        profileManager.editAt(idx, profile);
+        logger.append('Подписка уже актуальна\n');
+      }
+    } else {
+      logger.append(
+        'Профиль "${profile.name}" создан без подписки — перегенерирую только конфиг\n',
+      );
+      profile.lastUpdatedAt = timestamp;
+      profileManager.editAt(idx, profile);
+    }
+
+    _saveAll();
+    await _generateConfigFiles(profile: profile);
+    logger.append('config.yaml обновлён для профиля "${profile.name}"\n');
+  }
+
+  Future<void> _generateConfigFiles({required Profile profile}) async {
+    final routingPlan = buildRoutingRulesPlan(
+      ruMode: ruMode,
+      siteExcl: exclusions.siteExclusions,
+      appExcl: exclusions.appExclusions,
+    );
+
+    final configYaml = await buildClashConfig(
+      profile.url,
+      ruMode,
+      exclusions.siteExclusions,
+      exclusions.appExclusions,
+      routingPlan: routingPlan,
+    );
+
+    final basePath = configStore.baseDir.path;
+    final cfgPath = File('$basePath${Platform.pathSeparator}config.yaml');
+    await cfgPath.writeAsString(configYaml, flush: true);
+
+    try {
+      final debugPath = File('$basePath${Platform.pathSeparator}config_debug.yaml');
+      await debugPath.writeAsString(configYaml, flush: true);
+    } catch (e) {
+      logger.append('Не удалось записать config_debug.yaml: $e\n');
+    }
   }
 
   /// Ensure config for profile exists and open it in the platform default editor.
@@ -394,7 +557,7 @@ class VlfCore {
   /// Очистить логи по явной команде пользователя.
   void clearLogs() => logger.clear();
 
-  bool get isRunning => singboxManager.isRunning;
+  bool get isRunning => clashManager.isRunning;
 
   // Save current config and profiles to disk
   void _saveAll() {

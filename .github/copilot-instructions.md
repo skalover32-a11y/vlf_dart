@@ -1,53 +1,167 @@
-<!-- Copilot / AI agent instructions for contributors -->
-# Быстрый старт для AI-агента
+# VLF Tunnel - AI Agent Guide
 
-Ниже — концентрированное, практически полезное руководство для AI-агентов, работающих с этим репозиторием. Файл ориентирован на то, чтобы вы могли сразу вносить правки, писать код и понимать ключевые интеграции.
+## Project Overview
+Flutter VPN client for Windows managing VLESS connections via **Clash Meta (mihomo)** backend. Supports subscription URLs, TUN tunneling, Russian traffic routing modes, and domain/process exclusions.
 
-- **Главная цель проекта:** Flutter UI вокруг локального `sing-box` (sing-box.exe), который запускается как внешний процесс и управляется через `SingboxManager`.
+## Architecture & Data Flow
 
-- **Ключевые директории/файлы:**
-  - `lib/` — основная логика и UI. См. `lib/main.dart`, `lib/core/vlf_core.dart`, `lib/singbox_manager.dart`.
-  - `tools/build_and_package.ps1` — Windows packaging script (выполняет `flutter pub get`, `flutter build windows --release`, копирует бинарники и опционально собирает zip).
-  - `tools/gen_config.dart` — пример генерации `config_test.json` через `lib/singbox_config.dart` (используется для тестов/отладки конфигурации sing-box).
-  - `vlf_gui_config.json`, `profiles.json` — runtime-конфиги, читаемые/записываемые `ConfigStore` (`lib/config_store.dart`).
+### Core Components
+- **`VlfCore`** (`lib/core/vlf_core.dart`): Main facade exposing `ConfigStore`, `ProfileManager`, `Exclusions`, `ClashManager`, and `Logger` to UI
+- **`ClashManager`** (`lib/clash_manager.dart`): Manages `mihomo.exe` subprocess lifecycle, generates `config.yaml`, monitors stdout/stderr
+- **`ConfigStore`** (`lib/config_store.dart`): JSON persistence for `vlf_gui_config.json` and `profiles.json`
+- **`ProfileManager`** (`lib/profile_manager.dart`): In-memory profile list with CRUD operations
+- **UI**: `lib/ui/home_screen.dart` + modular widgets in `lib/ui/widgets/`
 
-- **Архитектура — кратко:**
-  - `VlfCore` (файл `lib/core/vlf_core.dart`) — фасад для UI: хранит `ConfigStore`, `ProfileManager`, `Exclusions`, `SingboxManager` и `Logger`. UI взаимодействует только с этим фасадом.
-  - `SingboxManager` (`lib/singbox_manager.dart`) — отвечает за формирование `config.json`, запуск/остановку `sing-box.exe`, обработку stdout/stderr и нотификации через `ValueNotifier<bool> isRunningNotifier` и `Logger`.
-  - `ProfileManager` / `ConfigStore` — простая сериализация профилей и GUI-настроек в JSON-файлы рядом с приложением.
-  - `subscription_decoder.dart` — правила извлечения `vless://` из сырых текстов, URL-ответов и base64-обёрток.
+### Configuration Pipeline
+1. User adds VLESS subscription URL (or scans QR code via `qr_profile_loader.dart`)
+2. `extractVlessFromAny()` in `subscription_decoder.dart` parses base64/plaintext to extract `vless://` URL
+3. `buildClashConfig()` in `clash_config.dart` generates YAML configuration with:
+   - VLESS outbound proxy (supports REALITY TLS)
+   - TUN inbound with auto-routing
+   - Rule-based routing: ru_mode GeoIP, domain exclusions, process exclusions
+4. `ClashManager.start()` writes `config.yaml` and launches `mihomo.exe -f config.yaml`
 
-- **Особенности и часто встречающиеся паттерны:**
-  - ValueNotifier-heavy UI: состояние подключения и режим работы (`VlfWorkMode`) публикуются через `ValueNotifier` и должны обновляться аккуратно при изменениях.
-  - Логирование: приложение использует `Logger` (стрим строк) — UI подписывается на `logger.stream`.
-  - Конфигурация sing-box генерируется в рантайме: `SingboxManager.start()` записывает `config.json` в `baseDir` перед запуском.
-  - Проверка доступа в Windows: `SingboxManager.isWindowsAdmin()` использует PowerShell вызов; есть метод `relaunchAsAdmin()` для поднятия привилегий.
-  - Процессы: при запуске sing-box слушаем stdout/stderr и ждём маркеров успешного старта (поиск строк `sing-box started`, `tcp server started` и т.п.). Таймауты — короткие (обычно 5s): учитывать в тестах/фикстурах.
+### State Management
+- **Profiles**: Stored in `vlf_gui_config.json` with fields: `name`, `url`, `ptype`, `address`, `remark`
+- **Runtime config**: `config.yaml` generated on-the-fly (also `config_debug.yaml` for inspection)
+- **Connection state**: `ClashManager.isRunningNotifier` (ValueNotifier<bool>) for UI reactivity
+- **Current profile**: `VlfCore.currentProfileIndex` (ValueNotifier<int?>)
 
-- **Build / release workflow (что реально выполнять):**
-  - Локальная сборка Windows (основной сценарий):
-    - `pwsh .\tools\build_and_package.ps1 -ProjectRoot (Get-Location).Path` — выполнит `flutter pub get`, `flutter build windows --release`, скопирует артефакты в `release\windows_x64_release` и переименует exe в `VLF_VPN.exe`.
-    - Скрипт также ищет нативные бинарники в `..\client` и `..\client\_internal` и копирует `sing-box.exe`, `wintun.dll`, `libiconv.dll` если найдёт.
-  - Для генерации примера конфигурации sing-box используйте:
-    - `dart run tools/gen_config.dart` (работает из корня репозитория) — создаст `config_test.json`.
+### Routing Modes
+- **GLOBAL (ru_mode=false)**: All traffic → VPN, except local/exclusions (default)
+- **RU-MODE (ru_mode=true)**: Russian GeoIP → DIRECT, rest → VPN (for banking/local services)
 
-- **Формат конфигов / названия файлов:**
-  - GUI-конфиг: `vlf_gui_config.json` (поля: `profiles`, `ru_mode`, `mode`, `site_exclusions`, `app_exclusions`). Чтение/запись — `ConfigStore`.
-  - Профили: `profiles.json` — список объектов `Profile` (см. `lib/profile_manager.dart`).
-  - Runtime sing-box config: `config.json` (в baseDir), генерируется `SingboxManager`.
+## Critical Workflows
 
-- **Примеры кода/вызовов для быстрых правок:**
-  - Перезапуск sing-box при смене режима: вызов `VlfCore.setWorkMode(...)` — фасад сам сохранит конфиг и перезапустит sing-box при необходимости.
-  - Добавление профиля из произвольного текста: `VlfCore.addProfileFromText(text)` использует `extractVlessFromAny`.
+### Building Production Binary
+```powershell
+# From project root
+pwsh .\tools\build_and_package.ps1 -ProjectRoot (Get-Location).Path
+# Optional: add -Zip to create archive
+pwsh .\tools\build_and_package.ps1 -ProjectRoot (Get-Location).Path -Zip
+```
+**What it does:**
+1. Runs `flutter pub get`
+2. Executes `flutter build windows --release`
+3. Copies output from `build\windows\x64\runner\Release` to `release\windows_x64_release`
+4. Renames `vlf_dart.exe` → `VLF_VPN.exe`
+5. Copies `mihomo.exe` and `wintun.dll` from project root (or fallback directories)
+6. Optionally creates `release\vlf_windows_x64_release.zip`
 
-- **Что стоит учитывать при изменениях:**
-  - Не изменяйте имена runtime-файлов (`vlf_gui_config.json`, `profiles.json`, `config.json`) без одновременного правки `ConfigStore` и `SingboxManager`.
-  - Любые изменения запуска sing-box должны учитывать: создание `config.json`, проверку наличия `sing-box.exe`, и корректную подписку/отписку от stdout/stderr, иначе UI потеряет доступ к логам.
-  - Packaging script (`tools/build_and_package.ps1`) ожидает Windows PowerShell; при изменениях обновляйте логику переименования exe и список включаемых нативных файлов.
+### Development Run
+```powershell
+flutter run -d windows
+# Or for release mode performance testing:
+flutter run -d windows --release
+```
+**Requirements:** `mihomo.exe` and `wintun.dll` must be in project root (same dir as `pubspec.yaml`)
 
-- **Где искать при отладке ошибок:**
-  - `release\windows_x64_release` и `build\windows\x64\runner\Release` — содержимое после сборки.
-  - Логи sing-box отображаются в UI и формируются через `Logger` — можно подписаться на `VlfCore.logStream`.
-  - Для проблем с подписками/парсингом — проверьте `lib/subscription_decoder.dart` и сценарий `tools/gen_config.dart`.
+### Configuration Files
+- **`vlf_gui_config.json`**: User profiles, ru_mode, exclusions (persisted to disk)
+- **`config.yaml`**: Generated Clash config (runtime, ephemeral)
+- **`config_debug.yaml`**: Debug copy of config for inspection
+- **`profiles.json`**: Legacy/alternative profile storage (less common)
 
-Если что-то неполно или вы хотите, чтобы я включил примеры коммитов/PR-шаблонов, скажите — внесу правки.
+## Project-Specific Patterns
+
+### Facade Pattern (VlfCore)
+UI never directly accesses `ClashManager`, `ConfigStore`, etc. All operations go through `VlfCore`:
+```dart
+// Good:
+await core.startTunnel(profileIndex);
+core.setRuMode(true);
+core.addProfile(profile);
+
+// Bad (direct access):
+await core.singboxManager.start(...); // Skip facade breaks encapsulation
+```
+
+### ValueNotifier-Heavy UI
+State changes propagate via ValueNotifier for reactive updates:
+```dart
+ValueListenableBuilder<bool>(
+  valueListenable: core.isConnected,
+  builder: (context, isConnected, _) => Text(isConnected ? 'Connected' : 'Disconnected'),
+)
+```
+
+### Threading & Async Safety
+- **Process management**: Runs in background, UI updates via `logger.append()` (synchronous)
+- **Stream processing**: stdout/stderr → UTF-8 decode → logger → UI listens on `logStream`
+- **No explicit locks**: Single-threaded Dart event loop, async/await for coordination
+
+### Subscription Parsing
+`extractVlessFromAny()` handles:
+- Direct `vless://` URLs
+- HTTP(S) subscription endpoints returning base64
+- Base64-encoded plaintext containing `vless://`
+- Extracts server/port/uuid/flow/security/fingerprint/sni from URL query params
+
+### Startup Detection
+`ClashManager.start()` waits for log markers (12s timeout):
+```dart
+// Success indicators:
+'start http', 'start mixed', 'start tun', 'tun mode enabled'
+
+// Failure indicators:
+'fatal', 'panic', 'cannot', 'failed to'
+```
+
+### Window Sizing (Desktop)
+`main.dart` uses `window_manager` package to set fixed 480x980 window (non-resizable). UI scales mobile design (430px width) via `AppWindowWrapper` transform.
+
+## Common Pitfalls
+
+### Clash Process Lifecycle
+1. **Graceful shutdown sequence**: SIGINT → wait 3s → SIGKILL
+2. Must set `_stopping = true` before kill to suppress error logs
+3. Cancel stream subscriptions BEFORE nulling `_proc` to avoid leaks
+4. Always check `_proc != null` before operations
+
+### Config Generation Timing
+- `config.yaml` generated **only on `ClashManager.start()`**, not ahead of time
+- `writeConfigForProfileIndex()` is a no-op (config not needed until start)
+- Debug configs written to `config_debug.yaml` for manual inspection
+
+### Binary Dependencies
+- **`mihomo.exe`**: Clash Meta binary (NOT sing-box)
+- **`wintun.dll`**: Windows TUN/TAP driver (required for TUN mode)
+- Both must be in same directory as app executable
+
+### PowerShell for IP/Location Queries
+Uses PowerShell `Invoke-WebRequest` to ensure traffic routes through TUN interface:
+```dart
+// Windows-specific bypass for Dart HttpClient (might skip TUN)
+Process.run('powershell', ['-Command', 'Invoke-WebRequest ...']);
+```
+
+### ru_mode Confusion
+- **false = GLOBAL** (все через VPN) — это дефолт
+- **true = RU-MODE** (российский трафик напрямую)
+- Смена режима триггерит `_restartIfRunning()` для применения
+
+## Key Files by Concern
+- **Architecture**: `lib/core/vlf_core.dart` (facade), `lib/clash_manager.dart` (process manager)
+- **Config generation**: `lib/clash_config.dart` (YAML builder)
+- **Subscription parsing**: `lib/subscription_decoder.dart`
+- **UI entry point**: `lib/main.dart`, `lib/ui/home_screen.dart`
+- **Build automation**: `tools/build_and_package.ps1`
+- **Window setup**: `lib/main.dart` (window_manager integration)
+
+## Dependencies
+- **Runtime**: Flutter 3.x, Dart SDK 3.9.2+
+- **Packages**: `window_manager`, `window_size`, `http`, `file_picker`, `image`, `zxing2`
+- **Bundled**: Clash Meta (mihomo.exe), wintun.dll
+
+## Testing & Debugging
+- **No unit tests present** — manual testing via UI
+- **Log inspection**: Check `config_debug.yaml` for generated config
+- **Process monitoring**: Watch for "start tun" in logs (confirms TUN activation)
+- **IP verification**: Use in-app IP display (fetches via ipify.org)
+- **Common error**: "mihomo.exe не найден" → check binary is in correct directory
+
+## Документация по изменениям
+См. также: `MIGRATION.md`, `CONFIG.md`, `CRITICAL_FIX_DNS_TUN.md` для истории архитектурных решений и миграций.
+
+---
+*Обновлено: 26.11.2025. Обновите при изменении ClashManager API, конфигурационного формата или процесса сборки.*

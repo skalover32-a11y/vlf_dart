@@ -4,6 +4,8 @@ class Profile {
   String ptype;
   String address;
   String remark;
+  String source;
+  DateTime? lastUpdatedAt;
 
   Profile(
     this.name,
@@ -11,6 +13,8 @@ class Profile {
     this.ptype = 'VLESS',
     this.address = '',
     this.remark = '',
+    this.source = '',
+    this.lastUpdatedAt,
   });
 
   Map<String, dynamic> toJson() => {
@@ -19,6 +23,8 @@ class Profile {
     'ptype': ptype,
     'address': address,
     'remark': remark,
+    'source': source,
+    'last_updated_at': lastUpdatedAt?.toIso8601String(),
   };
 
   static Profile fromJson(Map<String, dynamic> j) => Profile(
@@ -27,7 +33,20 @@ class Profile {
     ptype: j['ptype'] ?? 'VLESS',
     address: j['address'] ?? '',
     remark: j['remark'] ?? '',
+    source: j['source'] ?? '',
+    lastUpdatedAt: _parseDate(j['last_updated_at']),
   );
+
+  static DateTime? _parseDate(dynamic value) {
+    if (value == null) return null;
+    if (value is int) {
+      return DateTime.fromMillisecondsSinceEpoch(value, isUtc: true);
+    }
+    if (value is String) {
+      return DateTime.tryParse(value);
+    }
+    return null;
+  }
 }
 
 class ProfileManager {

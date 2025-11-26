@@ -1,0 +1,16 @@
+{
+  "profiles": [
+    {
+      "name": "vlfFIN-249717973@bot",
+      "url": "vless://cc0bf5d6-f57d-4969-ae07-5954b5aeac64@troynichek-live.ru:10745?encryption=none&flow=xtls-rprx-vision&fp=random&pbk=8xDmZ6DBcNQg5c5DHbUDY6zvaBoe0tU2_hvToLFimw0&security=reality&sid=106602&sni=www.caprover.com&spx=%2FqTQbHvhJTMOwI4e&type=tcp#vlfFIN-249717973@bot",
+      "ptype": "VLESS",
+      "address": "",
+      "remark": "",
+      "source": "https://troynichek-live.ru/subvlftun/f761a39dd58742ba91f20462398edc25",
+      "last_updated_at": "2025-11-26T15:08:08.447926Z"
+    }
+  ],
+  "ru_mode": true,
+  "site_exclusions": [],
+  "app_exclusions": []
+}

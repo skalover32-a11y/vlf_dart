@@ -38,3 +38,40 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+# --- Copy required runtime binaries into the generated runner folder ---------
+# The Clash Meta runtime (mihomo.exe) and the Windows TUN driver (wintun.dll)
+# must live next to the built executable so the desktop app can launch the
+# tunnel. Users typically place these files in the repo root; we mirror them
+# into the build output after every successful build.
+
+get_filename_component(VLF_PROJECT_ROOT "${CMAKE_SOURCE_DIR}/.." ABSOLUTE)
+set(VLF_DEP_NAMES "mihomo.exe" "wintun.dll")
+set(VLF_DEP_SOURCE_DIRS
+  "${VLF_PROJECT_ROOT}"
+  "${VLF_PROJECT_ROOT}/.."  # repo sibling fallbacks (legacy Python client)
+  "${VLF_PROJECT_ROOT}/../client"
+  "${VLF_PROJECT_ROOT}/../client/_internal"
+  "${VLF_PROJECT_ROOT}/../client/_internal/pyzbar"
+)
+
+foreach(DEP_NAME IN LISTS VLF_DEP_NAMES)
+  set(DEP_SOURCE "")
+  foreach(DEP_DIR IN LISTS VLF_DEP_SOURCE_DIRS)
+    if(EXISTS "${DEP_DIR}/${DEP_NAME}")
+      set(DEP_SOURCE "${DEP_DIR}/${DEP_NAME}")
+      break()
+    endif()
+  endforeach()
+
+  if(DEP_SOURCE STREQUAL "")
+    message(WARNING "${DEP_NAME} не найден — поместите файл в корень проекта, чтобы он копировался в сборку.")
+  else()
+    add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              "${DEP_SOURCE}"
+              "$<TARGET_FILE_DIR:${BINARY_NAME}>/${DEP_NAME}"
+      COMMENT "Копирую ${DEP_NAME} в папку сборки из ${DEP_SOURCE}"
+    )
+  endif()
+endforeach()

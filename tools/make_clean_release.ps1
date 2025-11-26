@@ -4,7 +4,7 @@ if (Test-Path $target) { Remove-Item -LiteralPath $target -Recurse -Force }
 New-Item -ItemType Directory -Path $target | Out-Null
 $src='D:\vlf\vlf_dart\release\windows_x64_release\*'
 Write-Host 'Copying release contents excluding config files...'
-Copy-Item -Path $src -Destination $target -Recurse -Force -Exclude 'config.json','config_debug.json','config_test.json','vlf_gui_config.json','profiles.json','singbox_launcher_env.txt'
+Copy-Item -Path $src -Destination $target -Recurse -Force -Exclude 'config.yaml','config_debug.yaml','config_test.yaml','vlf_gui_config.json','profiles.json'
 Write-Host 'Cleaning any stray config files in target (just in case)...'
 Get-ChildItem -Path $target -Include 'config*.json','vlf_gui_config.json','profiles.json' -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue }
 Write-Host 'Listing target files:'

@@ -403,13 +403,32 @@ class VlfCore {
       appExcl: exclusions.appExclusions,
       workMode: mode,
     );
+
+    if (mode == VlfWorkMode.proxy) {
+      try {
+        await SystemProxy.enableProxy(httpPort: 7890, socksPort: 7891);
+        logger.append('Системный прокси включён (HTTP 7890 / SOCKS 7891)\n');
+      } catch (e) {
+        logger.append('Ошибка включения системного прокси: $e\n');
+        await clashManager.stop();
+        rethrow;
+      }
+    } else {
+      try {
+        await SystemProxy.disableProxy();
+      } catch (e) {
+        logger.append('Ошибка отключения системного прокси: $e\n');
+      }
+    }
+  }
+
   Future<bool> _isProcessElevated() async {
     try {
       final result = await Process.run('powershell', [
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        '[Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent() | % { $_.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }'
+        r'[Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent() | % { $_.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator) }'
       ]);
       if (result.exitCode == 0) {
         final out = (result.stdout ?? '').toString().trim().toLowerCase();
@@ -434,24 +453,6 @@ class VlfCore {
       exit(0);
     } catch (e) {
       logger.append('\nНе удалось перезапустить с правами администратора: $e\n');
-    }
-  }
-
-    if (mode == VlfWorkMode.proxy) {
-      try {
-        await SystemProxy.enableProxy(httpPort: 7890, socksPort: 7891);
-        logger.append('Системный прокси включён (HTTP 7890 / SOCKS 7891)\n');
-      } catch (e) {
-        logger.append('Ошибка включения системного прокси: $e\n');
-        await clashManager.stop();
-        rethrow;
-      }
-    } else {
-      try {
-        await SystemProxy.disableProxy();
-      } catch (e) {
-        logger.append('Ошибка отключения системного прокси: $e\n');
-      }
     }
   }
 

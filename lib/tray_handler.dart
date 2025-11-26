@@ -12,10 +12,8 @@ class TrayHandler with WindowListener, TrayListener {
   final VlfCore core;
   bool _isExiting = false;
 
-    // Disconnect tunnel if running (fast-stop to avoid UI lag)
-    try {
-      if (core.clashManager.isRunning) {
-        await core.clashManager.stop(fast: true);
+  TrayHandler(this.core);
+
   Future<void> initialize() async {
     // Register window and tray listeners
     windowManager.addListener(this);

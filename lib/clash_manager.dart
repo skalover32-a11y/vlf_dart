@@ -263,7 +263,7 @@ class ClashManager {
   }
 
   /// Остановка Clash
-  Future<void> stop({bool fast = false}) async {
+  Future<void> stop() async {
     await stopClashGracefully();
   }
 
@@ -391,32 +391,16 @@ class ClashManager {
       final argsEscaped = extraArgs
           .map((a) => a.replaceAll('"', '""'))
           .join(' ');
-      try {
-        // First try graceful signals
-        if (Platform.isWindows) {
-          p.kill(ProcessSignal.sigint);
-        } else {
-          p.kill(ProcessSignal.sigterm);
-        }
-
-        // Wait for graceful exit (shorter if fast)
-        final gracefulTimeout = fast ? const Duration(seconds: 1) : const Duration(seconds: 3);
-        await p.exitCode.timeout(gracefulTimeout);
-      } catch (_) {
-        try {
-          // Escalate to SIGKILL if still alive
-          p.kill(ProcessSignal.sigkill);
-          // Wait for forced exit (shorter if fast)
-          final killTimeout = fast ? const Duration(seconds: 1) : const Duration(seconds: 2);
-          await p.exitCode.timeout(killTimeout);
-        } catch (_) {
-          // Windows fallback: иногда процесс упрямый — добьём taskkill
-          if (Platform.isWindows) {
-            try {
-              final tkTimeout = fast ? const Duration(seconds: 1) : const Duration(seconds: 2);
-              await Process.run('taskkill', ['/PID', p.pid.toString(), '/T', '/F'])
-                  .timeout(tkTimeout);
-            } catch (_) {}
-          }
-        }
-      }
+      final ps =
+          'Start-Process -FilePath "${exe.replaceAll('"', '""')}" -ArgumentList "$argsEscaped" -Verb RunAs';
+      await Process.start('powershell', [
+        '-NoProfile',
+        '-Command',
+        ps,
+      ], runInShell: false);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+}

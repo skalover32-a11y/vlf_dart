@@ -180,6 +180,16 @@ class _ExclusionsManagerState extends State<ExclusionsManager> {
     }
 
     // file
+    // На Android выбор приложений пока не реализован
+    if (Platform.isAndroid || Platform.isIOS) {
+      showAppSnackBar(
+        context,
+        'Выбор установленных приложений будет добавлен в следующей версии',
+      );
+      return;
+    }
+    
+    // Desktop: выбор .exe файла
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,

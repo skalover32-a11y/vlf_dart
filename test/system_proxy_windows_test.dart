@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:vlf_dart/core/system_proxy.dart';
+import 'package:vlf_tunnel/core/system_proxy.dart';
 
 void main() {
   late List<List<String>> commands;

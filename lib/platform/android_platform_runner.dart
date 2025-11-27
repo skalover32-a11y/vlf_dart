@@ -35,10 +35,17 @@ class AndroidPlatformRunner implements PlatformRunner {
     // Подписка на статус из нативного слоя
     _statusSub ??= _statusChannel.receiveBroadcastStream().listen((event) {
       final s = (event ?? '').toString();
+      _logger.append('Android status: $s\n');
       _statusCtl.add(s);
-      if (s.startsWith('running')) _running = true;
-      if (s.startsWith('stopped') || s.startsWith('error')) _running = false;
+      // Обновляем флаг _running на основе статуса
+      if (s.startsWith('starting') || s.startsWith('running')) {
+        _running = true;
+      }
+      if (s.startsWith('stopping') || s.startsWith('stopped') || s.startsWith('error')) {
+        _running = false;
+      }
     }, onError: (e) {
+      _logger.append('Android status error: $e\n');
       _statusCtl.add('error:$e');
       _running = false;
     });

@@ -91,6 +91,7 @@ class VlfVpnService : VpnService() {
     private fun startVpn(): Boolean {
         return try {
             Log.d(TAG, "Building VPN interface...")
+            notifyStatus("starting")
             
             // Создаем foreground notification
             val notification = createNotification()
@@ -132,8 +133,10 @@ class VlfVpnService : VpnService() {
     
     private fun stopVpn() {
         Log.i(TAG, "Stopping VPN...")
+        notifyStatus("stopping")
         
         try {
+            // Закрываем VPN интерфейс
             vpnInterface?.close()
             vpnInterface = null
             Log.d(TAG, "VPN interface closed")
@@ -141,32 +144,64 @@ class VlfVpnService : VpnService() {
             Log.e(TAG, "Error closing VPN interface", e)
         }
         
-        stopForeground(true)
-        stopSelf()
+        // Убираем foreground notification и останавливаем сервис
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            Log.d(TAG, "Foreground notification removed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error removing foreground", e)
+        }
         
+        // Уведомляем о завершении ПЕРЕД stopSelf(), чтобы Flutter получил статус
         notifyStatus("stopped")
-        Log.i(TAG, "VPN stopped")
+        Log.i(TAG, "VPN stopped, status sent to Flutter")
+        
+        stopSelf()
     }
     
     override fun onRevoke() {
         Log.w(TAG, "⚠️ onRevoke() called - User revoked VPN permission from system settings")
+        
+        // Закрываем интерфейс и уведомляем о статусе
+        try {
+            vpnInterface?.close()
+            vpnInterface = null
+            Log.d(TAG, "VPN interface closed in onRevoke()")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing VPN interface in onRevoke()", e)
+        }
+        
         notifyStatus("stopped")
-        stopVpn()
+        Log.i(TAG, "VPN revoked by system, status sent to Flutter")
+        
+        // stopSelf() будет вызван системой, не вызываем вручную
         super.onRevoke()
     }
     
     override fun onDestroy() {
         Log.i(TAG, "onDestroy() called")
-        instance = null
         
+        // Закрываем VPN интерфейс если ещё открыт
         try {
             vpnInterface?.close()
             vpnInterface = null
+            Log.d(TAG, "VPN interface closed in onDestroy()")
         } catch (e: Exception) {
             Log.e(TAG, "Error in onDestroy", e)
         }
         
+        // Убираем foreground notification
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) {
+            // Может быть уже удалено
+        }
+        
+        // Уведомляем о завершении
         notifyStatus("stopped")
+        Log.i(TAG, "Service destroyed, status sent to Flutter")
+        
+        instance = null
         super.onDestroy()
     }
     

@@ -191,9 +191,19 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
     private fun stopVpnService() {
         val ctx = context ?: throw IllegalStateException("Context is null")
         
-        val intent = Intent(ctx, VlfVpnService::class.java)
-        ctx.stopService(intent)
+        Log.i("VLF", "Stopping VPN service...")
         
-        Log.i("VLF", "VlfVpnService stop command sent")
+        // Отправляем ACTION_STOP через Intent для корректной остановки
+        val intent = Intent(ctx, VlfVpnService::class.java).apply {
+            action = "com.example.vlf_dart.STOP_VPN"
+        }
+        
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+            ctx.startForegroundService(intent)
+        } else {
+            ctx.startService(intent)
+        }
+        
+        Log.i("VLF", "VlfVpnService stop command sent via ACTION_STOP")
     }
 }

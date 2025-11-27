@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'dart:io';
 import 'core/vlf_core.dart';
 import 'ui/home_screen.dart';
-import 'tray_handler.dart';
+import 'platform/tray/tray_handler.dart';
 
 // Window sizing on desktop
 import 'package:window_size/window_size.dart' as window_size;
-import 'package:window_manager/window_manager.dart';
-import 'package:tray_manager/tray_manager.dart';
+// Conditional import for desktop-only window_manager
+import 'package:window_manager/window_manager.dart'
+    if (dart.library.html) 'platform/tray/window_manager_stub.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -105,7 +106,6 @@ class Bootstrap extends StatefulWidget {
 class _BootstrapState extends State<Bootstrap> {
   VlfCore? _core;
   TrayHandler? _trayHandler;
-  _EarlySystemTray? _earlyInterceptor;
   bool _isLoading = true;
   String? _error;
 
@@ -113,13 +113,6 @@ class _BootstrapState extends State<Bootstrap> {
   void initState() {
     super.initState();
     // Attach an early close interceptor to guarantee hide-to-tray behavior
-    // even before core/tray initialization finishes.
-    if (Platform.isWindows) {
-      _earlyInterceptor = _EarlySystemTray();
-      windowManager.addListener(_earlyInterceptor!);
-      trayManager.addListener(_earlyInterceptor!);
-      _earlyInterceptor!._ensureEarlyTrayIcon();
-    }
     _initialize();
   }
 
@@ -148,11 +141,6 @@ class _BootstrapState extends State<Bootstrap> {
 
   @override
   void dispose() {
-    if (_earlyInterceptor != null) {
-      windowManager.removeListener(_earlyInterceptor!);
-      trayManager.removeListener(_earlyInterceptor!);
-      _earlyInterceptor = null;
-    }
     _trayHandler?.dispose();
     super.dispose();
   }
@@ -172,66 +160,6 @@ class _BootstrapState extends State<Bootstrap> {
       );
     }
     return AppWindowWrapper(child: HomeScreen(core: _core!));
-  }
-}
-
-// Minimal early system-tray + close interceptor to bridge app startup.
-class _EarlySystemTray with WindowListener, TrayListener {
-  @override
-  void onWindowClose() async {
-    try {
-      final prevent = await windowManager.isPreventClose();
-      if (prevent) {
-        await windowManager.hide();
-        await windowManager.setSkipTaskbar(true);
-      }
-    } catch (_) {
-      await windowManager.hide();
-    }
-  }
-
-  // Basic tray icon so user can restore the window even before core is ready.
-  Future<void> _ensureEarlyTrayIcon() async {
-    try {
-      final path = _resolveTrayIconPath();
-      if (path != null) {
-        await trayManager.setIcon(path);
-      }
-      await trayManager.setContextMenu(
-        Menu(items: [MenuItem(key: 'show', label: 'Открыть VLF tunnel')]),
-      );
-    } catch (_) {}
-  }
-
-  String? _resolveTrayIconPath() {
-    final base = Directory.current.path;
-    final sep = Platform.pathSeparator;
-    final candidates = <String>[
-      '$base${sep}assets${sep}tray_icon.ico',
-      '$base${sep}data${sep}flutter_assets${sep}assets${sep}tray_icon.ico',
-    ];
-    for (final p in candidates) {
-      try {
-        if (File(p).existsSync()) return p;
-      } catch (_) {}
-    }
-    return null;
-  }
-
-  @override
-  void onTrayIconMouseDown() {
-    windowManager.show();
-    windowManager.setSkipTaskbar(false);
-    windowManager.focus();
-  }
-
-  @override
-  void onTrayMenuItemClick(MenuItem menuItem) {
-    if (menuItem.key == 'show') {
-      windowManager.show();
-      windowManager.setSkipTaskbar(false);
-      windowManager.focus();
-    }
   }
 }
 
@@ -286,3 +214,4 @@ class AppWindowWrapper extends StatelessWidget {
     );
   }
 }
+

@@ -107,13 +107,15 @@ class _ExclusionsManagerState extends State<ExclusionsManager> {
                 style: TextStyle(color: Colors.white),
               ),
             ),
-            SimpleDialogOption(
-              onPressed: () => Navigator.of(ctx).pop('process'),
-              child: const Text(
-                'Выбрать из процессов',
-                style: TextStyle(color: Colors.white),
+            // Выбор из процессов только для desktop платформ
+            if (Platform.isWindows || Platform.isLinux || Platform.isMacOS)
+              SimpleDialogOption(
+                onPressed: () => Navigator.of(ctx).pop('process'),
+                child: const Text(
+                  'Выбрать из процессов',
+                  style: TextStyle(color: Colors.white),
+                ),
               ),
-            ),
           ],
         ),
       ),

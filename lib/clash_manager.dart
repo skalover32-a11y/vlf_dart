@@ -24,6 +24,18 @@ class ClashManager {
     _logSub = _runner.logStream.listen((msg) {
       logger.append(msg);
     });
+    // Listen platform status updates to reflect real state in UI
+    _runner.statusStream.listen((status) {
+      final s = status.toLowerCase();
+      if (s.startsWith('running')) {
+        isRunningNotifier.value = true;
+      } else if (s.startsWith('stopped') || s.startsWith('error')) {
+        isRunningNotifier.value = false;
+      }
+      if (s.startsWith('error')) {
+        logger.append('[STATUS] $status\n');
+      }
+    });
   }
 
   bool get isRunning => _runner.isRunning;

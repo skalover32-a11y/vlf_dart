@@ -1,7 +1,8 @@
+import 'dart:io';
 import 'platform_runner.dart';
-import 'windows_platform_runner.dart' if (dart.library.io) 'windows_platform_runner.dart';
-import 'android_platform_runner.dart' if (dart.library.io) 'android_platform_runner.dart';
+import 'android_platform_runner.dart';
 import 'dart:io' show Platform;
+import 'windows_platform_runner.dart';
 
 /// Factory to create platform-specific runner based on current platform
 PlatformRunner createPlatformRunner() {
@@ -12,7 +13,7 @@ PlatformRunner createPlatformRunner() {
   } else {
     throw UnsupportedError(
       'Platform ${Platform.operatingSystem} not yet supported. '
-      'Currently only Windows and Android (stub) are available.',
+      'Currently only Windows and Android are available.',
     );
   }
 }

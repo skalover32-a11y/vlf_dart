@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:io';
-
 import 'package:vlf_core/vlf_core.dart';
 
 /// Configuration bundle for platform runner
@@ -38,6 +37,9 @@ abstract class PlatformRunner {
 
   /// Stream of log messages from the tunnel
   Stream<String> get logStream;
+
+  /// Stream of status updates: 'running', 'stopped', 'error:<message>'
+  Stream<String> get statusStream;
 
   /// Check admin/root privileges (platform-specific)
   Future<bool> isElevated();

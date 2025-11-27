@@ -246,28 +246,34 @@ class _HomeScreenState extends State<HomeScreen> {
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final double cardWidth = constraints.maxWidth.clamp(360.0, 960.0);
+            // Adaptive layout: mobile (<600) uses full width, desktop (>=600) is centered
+            final bool isMobile = constraints.maxWidth < 600;
+            final double cardWidth = isMobile 
+                ? constraints.maxWidth 
+                : constraints.maxWidth.clamp(360.0, 960.0);
             final double cardHeight = constraints.maxHeight.clamp(620.0, 1080.0);
 
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: Container(
-                  width: cardWidth,
-                  height: cardHeight,
+            final content = Padding(
+              padding: EdgeInsets.symmetric(
+                horizontal: isMobile ? 0 : 12, 
+                vertical: isMobile ? 0 : 8,
+              ),
+              child: Container(
+                width: cardWidth,
+                height: cardHeight,
                   padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF17232D),
-                    borderRadius: BorderRadius.circular(32),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.45),
-                        blurRadius: 24,
-                        offset: const Offset(0, 14),
-                      ),
-                    ],
-                  ),
-                  child: Stack(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF17232D),
+                  borderRadius: BorderRadius.circular(isMobile ? 0 : 32),
+                  boxShadow: isMobile ? null : [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.45),
+                      blurRadius: 24,
+                      offset: const Offset(0, 14),
+                    ),
+                  ],
+                ),
+                child: Stack(
                     children: [
                       ScrollConfiguration(
                         behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
@@ -516,7 +522,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                             ),
                                           ],
                                         ),
-                                        width: 340,
+                                        width: (constraints.maxWidth * 0.85).clamp(240.0, 340.0),
                                       );
                                     },
                                   );
@@ -576,9 +582,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                     ],
                   ),
-                ),
               ),
             );
+            
+            // Wrap in Center only for desktop/tablet
+            return isMobile ? content : Center(child: content);
           },
         ),
       ),

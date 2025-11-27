@@ -7,7 +7,11 @@ environment:
   sdk: ^3.9.2
 
 dependencies:
+  flutter:
+    sdk: flutter
   meta: ^1.11.0
   http: ^0.13.6
   image: ^4.0.17
   zxing2: ^0.2.4
+  path: ^1.8.3
+  path_provider: ^2.1.0

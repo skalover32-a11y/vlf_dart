@@ -13,12 +13,16 @@ class WindowsPlatformRunner implements PlatformRunner {
   
   final Logger _logger = Logger();
   bool _stopping = false;
+  final StreamController<String> _statusCtl = StreamController<String>.broadcast();
 
   @override
   Stream<String> get logStream => _logger.stream;
 
   @override
   bool get isRunning => _proc != null;
+
+  @override
+  Stream<String> get statusStream => _statusCtl.stream;
 
   @override
   Future<void> start(PlatformConfig config) async {
@@ -37,18 +41,13 @@ class WindowsPlatformRunner implements PlatformRunner {
       throw Exception('Clash уже запущен');
     }
 
-    // 2. Check mihomo.exe exists
-    final mihomoExe = File(
-      '${config.baseDir.path}${Platform.pathSeparator}mihomo.exe',
-    );
-    if (!mihomoExe.existsSync()) {
-      throw FileSystemException('mihomo.exe не найден', mihomoExe.path);
-    }
+    // 2. Ensure mihomo binary is available
+    final mihomoPath = await MihomoBinary.ensureMihomoBinary(baseDir: config.baseDir);
+    _logger.append('Mihomo binary: $mihomoPath\n');
 
     // 3. Generate config.yaml
-    final cfgPath = File(
-      '${config.baseDir.path}${Platform.pathSeparator}config.yaml',
-    );
+    final configPath = await VlfPaths.getConfigPath();
+    final cfgPath = File(configPath);
     final routingPlan = buildRoutingRulesPlan(
       ruMode: config.ruMode,
       siteExcl: config.siteExclusions,
@@ -85,9 +84,8 @@ class WindowsPlatformRunner implements PlatformRunner {
 
     // Debug copy
     try {
-      final debugFile = File(
-        '${config.baseDir.path}${Platform.pathSeparator}config_debug.yaml',
-      );
+      final debugPath = await VlfPaths.getDebugConfigPath();
+      final debugFile = File(debugPath);
       await debugFile.writeAsString(yamlContent, flush: true);
       _logger.append('config_debug.yaml записан для проверки\n');
     } catch (_) {}
@@ -95,8 +93,16 @@ class WindowsPlatformRunner implements PlatformRunner {
     // 4. Start mihomo.exe
     final env = Map<String, String>.from(Platform.environment);
 
+    // Debug: log all paths before starting
+    _logger.append('📍 Debug paths:\n');
+    _logger.append('  - mihomo binary: $mihomoPath\n');
+    _logger.append('  - config file: ${cfgPath.path}\n');
+    _logger.append('  - workingDirectory: ${config.baseDir.path}\n');
+    _logger.append('  - config.yaml exists: ${cfgPath.existsSync()}\n');
+    _logger.append('\n🚀 Starting mihomo with config at: ${cfgPath.path}\n');
+
     _proc = await Process.start(
-      mihomoExe.path,
+      mihomoPath,
       ['-f', cfgPath.path],
       environment: env,
       runInShell: false,
@@ -179,8 +185,10 @@ class WindowsPlatformRunner implements PlatformRunner {
 
           if (_stopping) {
             _logger.append('\nClash остановлен пользователем (exitCode=$rc)\n');
+            _statusCtl.add('stopped');
           } else {
             _logger.append('\n[!] Clash завершился неожиданно (exitCode=$rc)\n');
+            _statusCtl.add('stopped');
           }
         } catch (e) {
           if (!_stopping) {
@@ -220,6 +228,7 @@ class WindowsPlatformRunner implements PlatformRunner {
     }
 
     _logger.append('Clash Meta успешно запущен!\n');
+    _statusCtl.add('running');
   }
 
   @override
@@ -252,12 +261,14 @@ class WindowsPlatformRunner implements PlatformRunner {
     _stopping = false;
 
     _logger.append('Clash остановлен\n');
+    _statusCtl.add('stopped');
   }
 
   @override
   Future<void> quickStop() async {
     if (_proc == null) return;
     
+    await _statusCtl.close();
     _stopping = true;
     try {
       _proc?.kill(ProcessSignal.sigkill);

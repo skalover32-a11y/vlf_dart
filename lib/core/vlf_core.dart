@@ -79,6 +79,7 @@ class VlfCore {
       ValueNotifier<VlfWorkMode>(initialWorkMode),
     );
 
+
     // set default current profile index
     if (profileMgr.profiles.isNotEmpty) {
       core.currentProfileIndex.value = 0;
@@ -194,7 +195,8 @@ class VlfCore {
     profileManager.editAt(index, profile);
     _saveAll();
     if (currentProfileIndex.value == index) {
-      currentProfileIndex.notifyListeners();
+      // trigger UI update
+      currentProfileIndex.value = currentProfileIndex.value;
     }
   }
 
@@ -342,6 +344,12 @@ class VlfCore {
   Future<void> setWorkMode(VlfWorkMode mode) async {
     if (workMode.value == mode) return;
 
+    // На Android PROXY временно отключён
+    if (Platform.isAndroid && mode == VlfWorkMode.proxy) {
+      logger.append('PROXY режим на Android будет доступен позже. Режим не изменён.\n');
+      return;
+    }
+
     final wasConnected = isConnected.value;
     final profileIdx = currentProfileIndex.value;
 
@@ -376,20 +384,26 @@ class VlfCore {
       throw RangeError('profileIdx out of range');
     }
 
-      // Windows-specific: require elevation for TUN
-      if (Platform.isWindows) {
-        final elevated = await _isProcessElevated();
-        if (!elevated) {
-          adminWarning.value =
-              'Для TUN режима нужны права администратора. Используйте ПРОКСИ режим или запустите программу от имени администратора.';
-          logger.append('\nТребуются права администратора для TUN. Запуск отменён.\n');
-          return;
-        }
-      }
-
     final p = profileManager.profiles[profileIdx];
     final mode = workMode.value;
+
+    // Windows-specific: require elevation ONLY for TUN mode
+    if (Platform.isWindows && mode == VlfWorkMode.tun) {
+      final elevated = await _isProcessElevated();
+      if (!elevated) {
+        adminWarning.value =
+            'Для TUN режима нужны права администратора. Используйте ПРОКСИ режим или запустите программу от имени администратора.';
+        logger.append('\nТребуются права администратора для TUN. Запуск отменён.\n');
+        return;
+      }
+    }
     logger.append('Запуск туннеля в режиме ${mode.displayName}\n');
+
+    // На Android временно отключаем PROXY режим
+    if (Platform.isAndroid && mode == VlfWorkMode.proxy) {
+      logger.append('PROXY режим на Android будет доступен позже. Запуск отменён.\n');
+      return;
+    }
     await clashManager.start(
       p.url,
       Directory(configStore.baseDir.path),
@@ -636,12 +650,13 @@ class VlfCore {
             routingPlan: routingPlan,
           );
 
-    final basePath = configStore.baseDir.path;
-    final cfgPath = File('$basePath${Platform.pathSeparator}config.yaml');
+    final configPath = await VlfPaths.getConfigPath();
+    final cfgPath = File(configPath);
     await cfgPath.writeAsString(configYaml, flush: true);
 
     try {
-      final debugPath = File('$basePath${Platform.pathSeparator}config_debug.yaml');
+      final debugConfigPath = await VlfPaths.getDebugConfigPath();
+      final debugPath = File(debugConfigPath);
       await debugPath.writeAsString(configYaml, flush: true);
     } catch (e) {
       logger.append('Не удалось записать config_debug.yaml: $e\n');

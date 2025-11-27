@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:path/path.dart' as p;
 
 import 'profile_manager.dart';
 
@@ -16,9 +17,9 @@ class ConfigStore {
   });
 
   File get _guiConfigFile =>
-      File('${baseDir.path}${Platform.pathSeparator}$guiConfigFileName');
+      File(p.join(baseDir.path, guiConfigFileName));
   File get _profilesFile =>
-      File('${baseDir.path}${Platform.pathSeparator}$profilesFileName');
+      File(p.join(baseDir.path, profilesFileName));
 
   /// Load GUI config; returns a Map with defaults when файл отсутствует/битый.
   ///

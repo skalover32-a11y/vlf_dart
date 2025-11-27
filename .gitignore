@@ -99,3 +99,8 @@ tree.txt
 # Keep dev examples
 !dev/config_examples/*.yaml
 !dev/config_examples/*.json
+
+# Mihomo binaries (large files, download separately)
+assets/core/mihomo-android-*
+!assets/core/*.placeholder
+!assets/core/README.md

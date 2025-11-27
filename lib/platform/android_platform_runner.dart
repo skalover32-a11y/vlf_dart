@@ -1,64 +1,101 @@
 import 'dart:async';
-
+import 'package:flutter/services.dart';
 import 'package:vlf_core/vlf_core.dart';
 import 'platform_runner.dart';
 
-/// Android stub implementation (not yet implemented)
+/// Android заглушка: не запускает бинарники, общается через MethodChannel
 class AndroidPlatformRunner implements PlatformRunner {
+  static const MethodChannel _channel = MethodChannel('vlf_android_engine');
+  static const EventChannel _statusChannel = EventChannel('vlf_android_engine/status');
+
   final Logger _logger = Logger();
-  bool _isRunning = false;
+  bool _running = false;
+  final StreamController<String> _statusCtl = StreamController<String>.broadcast();
+  StreamSubscription? _statusSub;
 
   @override
   Stream<String> get logStream => _logger.stream;
 
   @override
-  bool get isRunning => _isRunning;
+  bool get isRunning => _running;
+
+  @override
+  Stream<String> get statusStream => _statusCtl.stream;
 
   @override
   Future<void> start(PlatformConfig config) async {
-    _logger.append('🤖 Android runner: VPN start requested\n');
-    _logger.append('Profile: ${config.profileUrl.substring(0, 20)}...\n');
-    _logger.append('Mode: ${config.workMode.displayName} / ${config.ruMode ? "RU" : "GLOBAL"}\n');
-    _logger.append('⚠️  Android VPN implementation not yet available\n');
-    _logger.append('📱 Will use VpnService API in future release\n');
-    
-    // Simulate successful "start" for UI testing
-    _isRunning = true;
-    
-    // Fake connection after 2 seconds
-    Future.delayed(const Duration(seconds: 2), () {
-      if (_isRunning) {
-        _logger.append('✓ Mock tunnel established (Android stub)\n');
-      }
+    final args = <String, dynamic>{
+      'mode': config.workMode == VlfWorkMode.proxy ? 'proxy' : 'tun',
+      'configYaml': await _buildYaml(config),
+      'debugPaths': {
+        'baseDir': config.baseDir.path,
+      },
+    };
+    _logger.append('AndroidPlatformRunner.startTunnel() called with mode=${config.workMode.displayName}\n');
+    // Подписка на статус из нативного слоя
+    _statusSub ??= _statusChannel.receiveBroadcastStream().listen((event) {
+      final s = (event ?? '').toString();
+      _statusCtl.add(s);
+      if (s.startsWith('running')) _running = true;
+      if (s.startsWith('stopped') || s.startsWith('error')) _running = false;
+    }, onError: (e) {
+      _statusCtl.add('error:$e');
+      _running = false;
     });
+    await _channel.invokeMethod('startTunnel', args);
+    _running = true;
+    _logger.append('Android engine start invoked\n');
+  }
+
+  Future<String> _buildYaml(PlatformConfig config) async {
+    final routingPlan = buildRoutingRulesPlan(
+      ruMode: config.ruMode,
+      siteExcl: config.siteExclusions,
+      appExcl: config.appExclusions,
+    );
+    return config.workMode == VlfWorkMode.proxy
+        ? await buildClashConfigProxy(
+            config.profileUrl,
+            config.ruMode,
+            config.siteExclusions,
+            config.appExclusions,
+            routingPlan: routingPlan,
+          )
+        : await buildClashConfig(
+            config.profileUrl,
+            config.ruMode,
+            config.siteExclusions,
+            config.appExclusions,
+            routingPlan: routingPlan,
+          );
   }
 
   @override
   Future<void> stop() async {
-    _logger.append('🤖 Android runner: VPN stop requested\n');
-    _isRunning = false;
-    _logger.append('✓ Mock tunnel stopped\n');
+    _logger.append('AndroidPlatformRunner.stopTunnel() called\n');
+    await _channel.invokeMethod('stopTunnel');
+    _running = false;
   }
 
   @override
   Future<void> quickStop() async {
-    _isRunning = false;
+    await stop();
   }
 
   @override
-  Future<bool> isElevated() async {
-    // Android apps don't need root for VpnService
-    return true;
-  }
+  Future<bool> isElevated() async => false;
 
   @override
   Future<void> relaunchElevated() async {
-    throw UnsupportedError('Android apps use VpnService, no elevation needed');
+    throw UnsupportedError('Elevation not supported on Android');
   }
 
   @override
-  Future<void> dispose() async {
-    await stop();
-    _logger.dispose();
+  Future<void> dispose() async {}
+
+  Future<String> getStatus() async {
+    final status = await _channel.invokeMethod<String>('getStatus');
+    return status ?? 'unknown';
   }
 }
+// (старую реализацию запуска бинарника на Android удалили как несовместимую)

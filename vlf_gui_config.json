@@ -20,7 +20,7 @@
     }
   ],
   "ru_mode": true,
-  "work_mode": "tun",
+  "work_mode": "proxy",
   "site_exclusions": [],
   "app_exclusions": []
 }

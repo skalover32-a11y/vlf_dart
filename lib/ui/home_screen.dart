@@ -3,7 +3,8 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:vlf_core/vlf_core.dart' show VlfWorkMode, VlfWorkModeExtension, decodeQrFromImage;
+import 'package:vlf_core/vlf_core.dart'
+  show VlfConnectionStatus, VlfWorkMode, VlfWorkModeExtension, decodeQrFromImage;
 
 import '../core/vlf_core.dart';
 import 'app_dialogs.dart';
@@ -321,41 +322,56 @@ class _HomeScreenState extends State<HomeScreen> {
                                 },
                               ),
                               const SizedBox(height: 12),
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  ValueListenableBuilder<bool>(
-                                    valueListenable: core.isConnected,
-                                    builder: (context, connected, _) {
-                                      return Container(
+                              ValueListenableBuilder<VlfConnectionStatus>(
+                                valueListenable: core.connectionStatus,
+                                builder: (context, status, _) {
+                                  final bool connected = status == VlfConnectionStatus.connected;
+                                  final bool connecting = status == VlfConnectionStatus.connecting;
+                                  final bool errored = status == VlfConnectionStatus.error;
+                                  final Color indicatorColor = connected
+                                      ? const Color(0xFF10B981)
+                                      : connecting
+                                          ? const Color(0xFFFBBF24)
+                                          : Colors.redAccent;
+                                  final String statusLabel;
+                                  if (connecting) {
+                                    statusLabel = 'Подключение...';
+                                  } else if (connected) {
+                                    statusLabel = 'Туннель активен';
+                                  } else if (errored) {
+                                    statusLabel = 'Ошибка подключения';
+                                  } else {
+                                    statusLabel = 'Туннель не активен';
+                                  }
+
+                                  return Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Container(
                                         width: 12,
                                         height: 12,
                                         decoration: BoxDecoration(
-                                          color: connected ? const Color(0xFF10B981) : Colors.redAccent,
+                                          color: indicatorColor,
                                           shape: BoxShape.circle,
                                         ),
-                                      );
-                                    },
-                                  ),
-                                  const SizedBox(width: 8),
-                                  ValueListenableBuilder<bool>(
-                                    valueListenable: core.isConnected,
-                                    builder: (context, connected, _) {
-                                      return Text(
-                                        connected ? 'Туннель активен' : 'Туннель не активен',
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        statusLabel,
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontWeight: FontWeight.w600,
                                         ),
-                                      );
-                                    },
-                                  ),
-                                ],
+                                      ),
+                                    ],
+                                  );
+                                },
                               ),
                               const SizedBox(height: 18),
-                              ValueListenableBuilder<bool>(
-                                valueListenable: core.isConnected,
-                                builder: (context, connected, _) {
+                              ValueListenableBuilder<VlfConnectionStatus>(
+                                valueListenable: core.connectionStatus,
+                                builder: (context, status, _) {
+                                  final bool connected = status == VlfConnectionStatus.connected;
                                   return VlfCircleButton(
                                     isOn: connected,
                                     onTap: toggleConnection,
@@ -368,7 +384,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: RuModeButton(
                                     isEnabled: core.ruMode,
                                     onTap: () async {
-                                      final wasRunning = core.clashManager.isRunningNotifier.value;
+                                      final wasRunning = core.isConnected.value;
                                       final currentProfileIdx = core.currentProfileIndex.value;
                                       if (wasRunning) {
                                         await core.stopTunnel();

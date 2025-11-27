@@ -3,23 +3,94 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:vlf_core/vlf_core.dart';
+import 'package:vlf_core/vlf_core.dart'
+    show
+        Logger,
+        VlfConnectionStatus,
+        VlfWorkMode,
+        VlfWorkModeExtension,
+        buildRoutingRulesPlan;
+
+import 'platform/platform_locator.dart';
+import 'platform/platform_runner.dart';
 
 /// Менеджер процесса Clash Meta (mihomo) для управления VPN-туннелем.
 /// API аналогичен SingboxManager для упрощения интеграции.
 class ClashManager {
-  Process? _proc;
-  StreamSubscription<List<int>>? _stdoutSub;
-  StreamSubscription<List<int>>? _stderrSub;
   final Logger logger = Logger();
+  final PlatformRunner _runner;
+  StreamSubscription<String>? _runnerLogsSub;
 
-  /// Notifier для состояния работы mihomo (подписывайтесь из UI)
+  /// Notifier состояния подключения для UI (disconnected/connecting/connected)
+  final ValueNotifier<VlfConnectionStatus> connectionStatusNotifier =
+      ValueNotifier<VlfConnectionStatus>(VlfConnectionStatus.disconnected);
+
+  /// Backward-compatible bool notifier used across legacy UI pieces
   final ValueNotifier<bool> isRunningNotifier = ValueNotifier<bool>(false);
 
-  /// Флаг преднамеренной остановки (чтобы не считать exitCode != 0 крешом)
-  bool _stopping = false;
+  bool _awaitingStartupAck = false;
 
-  bool get isRunning => _proc != null;
+    ClashManager({PlatformRunner? runner})
+      : _runner = runner ?? PlatformLocator.runner {
+    _runnerLogsSub = _runner.logs.listen(
+      (event) {
+        logger.append(event);
+        _handleLogEvent(event);
+      },
+      onError: (error, _) {
+        logger.append('[Runner] $error\n');
+      },
+    );
+  }
+
+  void _handleLogEvent(String event) {
+    final lower = event.toLowerCase();
+
+    // Detect early readiness markers to switch UI immediately.
+    if (_awaitingStartupAck && _isStartupReadyLine(lower)) {
+      _markConnected();
+    }
+
+    if (lower.contains('clash завершился') || lower.contains('остановлен пользователем')) {
+      _awaitingStartupAck = false;
+      _setStatus(VlfConnectionStatus.disconnected);
+    }
+
+    if (_awaitingStartupAck &&
+        (lower.contains('fatal') ||
+            lower.contains('panic') ||
+            lower.contains('cannot') ||
+            lower.contains('failed to')) &&
+        !lower.contains('failed to resolve')) {
+      _awaitingStartupAck = false;
+      _setStatus(VlfConnectionStatus.error);
+    }
+  }
+
+  bool _isStartupReadyLine(String text) {
+    return text.contains('запускаю clash meta') ||
+        text.contains('clash запущен') ||
+        text.contains('start initial configuration') ||
+        text.contains('tun adapter listening') ||
+        text.contains('start http') ||
+        text.contains('start mixed') ||
+        text.contains('start tun') ||
+        text.contains('tun mode enabled');
+  }
+
+  void _setStatus(VlfConnectionStatus status) {
+    if (connectionStatusNotifier.value == status) return;
+    connectionStatusNotifier.value = status;
+    final isConnected = status == VlfConnectionStatus.connected;
+    if (isRunningNotifier.value != isConnected) {
+      isRunningNotifier.value = isConnected;
+    }
+  }
+
+  void _markConnected() {
+    _awaitingStartupAck = false;
+    _setStatus(VlfConnectionStatus.connected);
+  }
 
   /// Запуск Clash Meta (mihomo) с генерацией конфигурации.
   ///
@@ -39,31 +110,6 @@ class ClashManager {
     List<String> appExcl = const [],
     VlfWorkMode workMode = VlfWorkMode.tun, // TUN по умолчанию
   }) async {
-    // 1. Извлекаем VLESS из подписки
-    String vless = '';
-    try {
-      vless = await extractVlessFromAny(profileUrl);
-      logger.append('VLESS: $vless\n');
-    } catch (e) {
-      final msg = 'Ошибка при получении подписки: $e';
-      logger.append('$msg\n');
-      throw Exception(msg);
-    }
-
-    if (_proc != null) {
-      throw Exception('Clash уже запущен');
-    }
-
-    // 2. Проверяем наличие mihomo.exe
-    final mihomoExe = File(
-      '${baseDir.path}${Platform.pathSeparator}mihomo.exe',
-    );
-    if (!mihomoExe.existsSync()) {
-      throw FileSystemException('mihomo.exe не найден', mihomoExe.path);
-    }
-
-    // 3. Генерируем config.yaml
-    final cfgPath = File('${baseDir.path}${Platform.pathSeparator}config.yaml');
     final routingPlan = buildRoutingRulesPlan(
       ruMode: ruMode,
       siteExcl: siteExcl,
@@ -78,249 +124,42 @@ class ClashManager {
       'ruRules=${routingPlan.ruCount}\n',
     );
 
-    // Generate config based on work mode
-    final yamlContent = workMode == VlfWorkMode.proxy
-        ? await buildClashConfigProxy(
-            vless,
-            ruMode,
-            siteExcl,
-            appExcl,
-            routingPlan: routingPlan,
-          )
-        : await buildClashConfig(
-            vless,
-            ruMode,
-            siteExcl,
-            appExcl,
-            routingPlan: routingPlan,
-          );
+    final config = PlatformRunnerConfig(
+      profileUrl: profileUrl,
+      baseDir: baseDir,
+      ruMode: ruMode,
+      siteExclusions: List<String>.from(siteExcl),
+      appExclusions: List<String>.from(appExcl),
+      workMode: workMode,
+      routingPlan: routingPlan,
+    );
 
-    await cfgPath.writeAsString(yamlContent, flush: true);
-    logger.append('config.yaml сгенерирован\n');
+    _awaitingStartupAck = true;
+    _setStatus(VlfConnectionStatus.connecting);
 
-    // Debug: сохраняем копию для проверки
     try {
-      final debugFile = File(
-        '${baseDir.path}${Platform.pathSeparator}config_debug.yaml',
-      );
-      await debugFile.writeAsString(yamlContent, flush: true);
-      logger.append('config_debug.yaml записан для проверки\n');
-    } catch (_) {}
-
-    // 4. Запускаем mihomo.exe -f config.yaml
-    final env = Map<String, String>.from(Platform.environment);
-
-    _proc = await Process.start(
-      mihomoExe.path,
-      ['-f', cfgPath.path],
-      environment: env,
-      runInShell: false,
-      workingDirectory: baseDir.path,
-    );
-
-    isRunningNotifier.value = true;
-    logger.append('Запускаю Clash Meta (mihomo)...\n');
-
-    // 5. Слушаем stdout и stderr
-    final stdoutDone = Completer<void>();
-    final stderrDone = Completer<void>();
-    final startupCompleter = Completer<bool>();
-    bool hasSeenOutput = false;
-    bool startupError = false;
-
-    _stdoutSub = _proc!.stdout.listen(
-      (data) {
-        hasSeenOutput = true;
-        try {
-          final text = utf8.decode(data);
-          logger.append(text);
-          // Clash обычно выводит INFO/WARN/ERROR в stdout
-          // Подтверждение старта — любая активность без явных ошибок
-          if (!startupCompleter.isCompleted) {
-            final lower = text.toLowerCase();
-            if (lower.contains('start http') ||
-                lower.contains('start mixed') ||
-                lower.contains('start tun') ||
-                lower.contains('tun mode enabled')) {
-              startupCompleter.complete(true);
-            }
-          }
-        } catch (_) {
-          logger.append(String.fromCharCodes(data));
-        }
-      },
-      onDone: () {
-        if (!stdoutDone.isCompleted) stdoutDone.complete();
-      },
-    );
-
-    _stderrSub = _proc!.stderr.listen(
-      (data) {
-        hasSeenOutput = true;
-        try {
-          final text = utf8.decode(data);
-          final lower = text.toLowerCase();
-
-          // Фильтруем шумные сообщения
-          if (lower.contains('deprecated') || lower.contains('warning:')) {
-            logger.append('[WARN] $text');
-          } else {
-            logger.append('[ERR] $text');
-          }
-
-          if (!startupCompleter.isCompleted) {
-            // Явная ошибка при старте
-            if (lower.contains('fatal') ||
-                lower.contains('panic') ||
-                lower.contains('cannot') ||
-                lower.contains('failed to')) {
-              startupError = true;
-              startupCompleter.complete(false);
-            }
-          }
-        } catch (_) {
-          logger.append('[ERR] ${String.fromCharCodes(data)}');
-        }
-      },
-      onDone: () {
-        if (!stderrDone.isCompleted) stderrDone.complete();
-      },
-    );
-
-    // 6. Мониторим завершение процесса в фоне
-    unawaited(
-      Future(() async {
-        try {
-          final rc = await _proc!.exitCode;
-          await Future.wait([
-            stdoutDone.future.catchError((_) {}),
-            stderrDone.future.catchError((_) {}),
-          ]).timeout(const Duration(seconds: 5), onTimeout: () => <void>[]);
-
-          if (_stopping) {
-            logger.append('\nClash остановлен пользователем (exitCode=$rc)\n');
-          } else {
-            logger.append('\nClash завершился с кодом $rc\n');
-          }
-        } catch (e) {
-          logger.append('\nClash завершился с ошибкой: $e\n');
-        } finally {
-          _stopping = false;
-          _proc = null;
-          isRunningNotifier.value = false;
-        }
-      }),
-    );
-
-    // 7. Ждём подтверждения старта или таймаута
-    try {
-      final result = await Future.any([
-        startupCompleter.future,
-        Future.delayed(const Duration(seconds: 12), () => null),
-      ]);
-
-      if (result is bool) {
-        if (result == false) {
-          // Явный провал старта
-          try {
-            await stop();
-          } catch (_) {}
-          throw Exception('Clash не смог запуститься (ошибка в логах)');
-        }
-        // result == true => успешный старт
-      } else {
-        // Таймаут — проверяем состояние
-        final exited = _proc == null;
-        if (exited) {
-          throw Exception('Clash завершился сразу после запуска');
-        } else {
-          if (startupError) {
-            try {
-              await stop();
-            } catch (_) {}
-            throw Exception('Clash сообщил об ошибке при старте');
-          }
-          // Процесс жив и нет явных ошибок
-          if (hasSeenOutput) {
-            logger.append(
-              'Clash запущен (подтверждение по активности логов)\n',
-            );
-          } else {
-            logger.append('Clash запущен (без явной стартовой строки)\n');
-          }
-        }
-      }
+      await _runner.startTunnel(config);
+      _markConnected();
     } catch (e) {
-      final exited = _proc == null;
-      if (exited) {
-        throw Exception('Clash завершился сразу после запуска');
-      }
-      logger.append('Предупреждение: ошибка при подтверждении запуска: $e\n');
+      _awaitingStartupAck = false;
+      _setStatus(VlfConnectionStatus.error);
+      rethrow;
     }
   }
 
   /// Остановка Clash
   Future<void> stop() async {
-    await stopClashGracefully();
+    _awaitingStartupAck = false;
+    await _runner.stopTunnel();
+    _setStatus(VlfConnectionStatus.disconnected);
   }
 
-  /// Мягкая остановка Clash: SIGINT -> ждём 3с -> SIGKILL
-  Future<void> stopClashGracefully() async {
-    final p = _proc;
-    if (p == null) return;
-
-    _stopping = true;
-
-    try {
-      // Попытка мягкой остановки
-      try {
-        p.kill(ProcessSignal.sigint);
-      } catch (_) {
-        try {
-          p.kill(ProcessSignal.sigterm);
-        } catch (_) {}
-      }
-
-      try {
-        await p.exitCode.timeout(const Duration(seconds: 3));
-      } on TimeoutException {
-        // Принудительное завершение
-        try {
-          p.kill(ProcessSignal.sigkill);
-        } catch (_) {}
-        try {
-          await p.exitCode.timeout(const Duration(seconds: 2));
-        } catch (_) {}
-
-        // Windows fallback: иногда процесс упрямый — добьём taskkill
-        if (Platform.isWindows) {
-          try {
-            await Process.run('taskkill', ['/PID', p.pid.toString(), '/T', '/F'])
-                .timeout(const Duration(seconds: 2));
-          } catch (_) {}
-        }
-      }
-    } catch (_) {}
-
-    // Очистка подписок и состояния
-    try {
-      await _stdoutSub?.cancel();
-    } catch (_) {}
-    _stdoutSub = null;
-
-    try {
-      await _stderrSub?.cancel();
-    } catch (_) {}
-    _stderrSub = null;
-
-    _proc = null;
-    isRunningNotifier.value = false;
-    logger.append('Clash процесс полностью остановлен\n');
-  }
-
-  /// Освобождение ресурсов (алиас для stop)
+  /// Освобождение ресурсов (останавливает раннер и закрывает лог-подписки)
   Future<void> dispose() async {
-    await stop();
+    await _runnerLogsSub?.cancel();
+    await _runner.dispose();
+    _awaitingStartupAck = false;
+    _setStatus(VlfConnectionStatus.disconnected);
   }
 
   /// Получение текущего внешнего IP через системный стек
@@ -401,3 +240,4 @@ class ClashManager {
     }
   }
 }
+

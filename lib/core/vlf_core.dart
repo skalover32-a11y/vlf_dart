@@ -20,6 +20,7 @@ class VlfCore {
   bool ruMode;
   // ValueNotifier для подписки UI на состояние подключения
   final ValueNotifier<bool> isConnected;
+  final ValueNotifier<VlfConnectionStatus> connectionStatus;
 
   // Work mode: TUN or PROXY
   final ValueNotifier<VlfWorkMode> workMode;
@@ -36,6 +37,7 @@ class VlfCore {
     this.logger,
     this.ruMode,
     this.isConnected,
+    this.connectionStatus,
     this.workMode,
   );
 
@@ -76,6 +78,7 @@ class VlfCore {
       coreLogger,
       guiCfg['ru_mode'] == true,
       clashMgr.isRunningNotifier,
+      clashMgr.connectionStatusNotifier,
       ValueNotifier<VlfWorkMode>(initialWorkMode),
     );
 
@@ -681,7 +684,7 @@ class VlfCore {
   /// Очистить логи по явной команде пользователя.
   void clearLogs() => logger.clear();
 
-  bool get isRunning => clashManager.isRunning;
+  bool get isRunning => isConnected.value;
 
   // Save current config and profiles to disk
   void _saveAll() {

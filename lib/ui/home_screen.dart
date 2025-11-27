@@ -153,6 +153,51 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _handleAddByQrAsync() async {
     _closeMenus();
+    
+    // На мобильных показываем выбор между картинкой и камерой
+    if (Platform.isAndroid || Platform.isIOS) {
+      final choice = await showDialog<String>(
+        context: context,
+        builder: (ctx) => Dialog(
+          backgroundColor: const Color(0xFF1A2332),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Добавить через QR код',
+                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 20),
+                ListTile(
+                  leading: const Icon(Icons.image, color: Colors.white70),
+                  title: const Text('Выбрать картинку', style: TextStyle(color: Colors.white)),
+                  onTap: () => Navigator.of(ctx).pop('image'),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.camera_alt, color: Colors.white70),
+                  title: const Text('Сканировать камерой', style: TextStyle(color: Colors.white)),
+                  onTap: () => Navigator.of(ctx).pop('camera'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+      
+      if (choice == null) return;
+      
+      if (choice == 'camera') {
+        // TODO: Реализовать сканирование камерой в будущем
+        if (!mounted) return;
+        showAppSnackBar(context, 'Сканирование камерой будет добавлено в следующей версии');
+        return;
+      }
+    }
+    
+    // Выбор картинки с QR кодом
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,

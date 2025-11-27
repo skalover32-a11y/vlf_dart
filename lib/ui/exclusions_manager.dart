@@ -103,7 +103,7 @@ class _ExclusionsManagerState extends State<ExclusionsManager> {
             SimpleDialogOption(
               onPressed: () => Navigator.of(ctx).pop('file'),
               child: const Text(
-                'Выбрать файл (exe)',
+                'Выбрать приложение',
                 style: TextStyle(color: Colors.white),
               ),
             ),

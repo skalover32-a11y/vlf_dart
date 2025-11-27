@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:installed_apps/installed_apps.dart';
+import 'package:installed_apps/app_info.dart';
 import '../core/vlf_core.dart';
 import 'app_dialogs.dart';
 
@@ -180,12 +182,61 @@ class _ExclusionsManagerState extends State<ExclusionsManager> {
     }
 
     // file
-    // На Android выбор приложений пока не реализован
     if (Platform.isAndroid || Platform.isIOS) {
-      showAppSnackBar(
-        context,
-        'Выбор установленных приложений будет добавлен в следующей версии',
-      );
+      // Android: показать список установленных приложений
+      try {
+        final apps = await InstalledApps.getInstalledApps(
+          true, // включить системные приложения
+          true, // включить иконки
+        );
+        
+        if (!mounted) return;
+        
+        final selected = await showDialog<AppInfo?>(
+          context: context,
+          builder: (ctx) => appDialogWrapper(
+            buildAppAlert(
+              title: const Text(
+                'Выберите приложение',
+                style: TextStyle(color: Colors.white),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                height: 400,
+                child: ListView.builder(
+                  itemCount: apps.length,
+                  itemBuilder: (context, index) {
+                    final app = apps[index];
+                    return ListTile(
+                      leading: app.icon != null
+                          ? Image.memory(app.icon!, width: 40, height: 40)
+                          : const Icon(Icons.android, color: Colors.white70),
+                      title: Text(
+                        app.name,
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                      subtitle: Text(
+                        app.packageName,
+                        style: const TextStyle(color: Colors.white54, fontSize: 11),
+                      ),
+                      onTap: () => Navigator.of(ctx).pop(app),
+                    );
+                  },
+                ),
+              ),
+            ),
+          ),
+        );
+        
+        if (selected == null) return;
+        // Сохраняем package name для Android
+        await widget.core.addAppExclusionAsync(selected.packageName);
+        _reload();
+        setState(() {});
+        showAppSnackBar(context, 'Исключение для приложения добавлено');
+      } catch (e) {
+        showAppSnackBar(context, 'Ошибка при получении списка приложений: $e');
+      }
       return;
     }
     

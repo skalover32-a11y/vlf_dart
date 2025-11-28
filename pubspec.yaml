@@ -40,6 +40,7 @@ dependencies:
   tray_manager: ^0.2.3
   installed_apps: ^1.4.0
   path_provider: ^2.1.0
+  path: ^1.9.0
   vlf_core:
     path: packages/vlf-core
 

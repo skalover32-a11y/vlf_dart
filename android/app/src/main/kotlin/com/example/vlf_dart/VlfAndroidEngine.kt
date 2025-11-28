@@ -22,6 +22,9 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
     private var context: Context? = null
     private var activity: Activity? = null
     private var pendingResult: MethodChannel.Result? = null
+    private var pendingMode: String = "tun"
+    private var pendingConfigYaml: String = ""
+    private var latestConfigJson: String? = null
     
     companion object {
         private const val VPN_REQUEST_CODE = 1001
@@ -46,10 +49,35 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
+            "startSingboxCore" -> {
+                val args = call.arguments as? Map<*, *> ?: emptyMap<String, Any>()
+                val binaryPath = args["binaryPath"] as? String ?: ""
+                val configPath = args["configPath"] as? String ?: ""
+                Log.i("VLF", "startSingboxCore bin=$binaryPath config=$configPath")
+                result.success("ok")
+            }
+            "stopSingboxCore" -> {
+                Log.i("VLF", "stopSingboxCore requested")
+                result.success("ok")
+            }
+            "prepareConfig" -> {
+                val json = call.arguments as? String
+                if (json.isNullOrEmpty()) {
+                    Log.w("VLF", "prepareConfig called with empty json")
+                    result.error("invalid_config", "Empty config", null)
+                    return
+                }
+                latestConfigJson = json
+                VlfVpnService.updateConfig(json)
+                Log.i("VLF", "prepareConfig accepted, json length=${json.length}")
+                result.success("ok")
+            }
             "startTunnel" -> {
                 val args = call.arguments as? Map<*, *> ?: emptyMap<String, Any>()
                 val mode = args["mode"] as? String ?: "tun"
                 val cfg = args["configYaml"] as? String ?: ""
+                pendingMode = mode
+                pendingConfigYaml = cfg
                 Log.i("VLF", "AndroidEngine.startTunnel mode=$mode, configYaml.length=${cfg.length}")
                 
                 try {
@@ -150,7 +178,7 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
                 // Пользователь дал разрешение, запускаем сервис
                 // Нужно получить параметры из pendingResult
                 try {
-                    startVpnService("tun", "")
+                    startVpnService(pendingMode, pendingConfigYaml)
                     pendingResult?.success("ok")
                 } catch (t: Throwable) {
                     Log.e("VLF", "Error starting VPN after permission granted", t)
@@ -175,6 +203,7 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
         val intent = Intent(ctx, VlfVpnService::class.java).apply {
             putExtra("mode", mode)
             putExtra("configYaml", configYaml)
+            latestConfigJson?.let { putExtra("configJson", it) }
         }
         
         Log.i("VLF", "Starting VlfVpnService...")

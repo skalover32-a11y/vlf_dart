@@ -31,6 +31,9 @@ class VlfVpnService : VpnService() {
         
         @Volatile
         private var statusCallback: ((String) -> Unit)? = null
+
+        @Volatile
+        private var latestConfigJson: String? = null
         
         fun setStatusCallback(callback: (String) -> Unit) {
             statusCallback = callback
@@ -48,16 +51,32 @@ class VlfVpnService : VpnService() {
         }
         
         fun isRunning(): Boolean = instance != null
+
+        fun updateConfig(json: String) {
+            latestConfigJson = json
+            Log.i(TAG, "Config JSON updated, length=${json.length}")
+        }
+
+        fun getLatestConfig(): String? = latestConfigJson
     }
     
     private var vpnInterface: ParcelFileDescriptor? = null
     private var configYaml: String? = null
     private var workMode: String = "tun"
+    private var currentConfigJson: String? = null
+    private val coreEngine = AndroidCoreEngine()
+    private var coreStarted = false
     
     override fun onCreate() {
         super.onCreate()
         instance = this
         Log.i(TAG, "onCreate() called")
+        currentConfigJson = getLatestConfig()
+        currentConfigJson?.let {
+            Log.i(TAG, "Using prepared config JSON length=${it.length}")
+            coreEngine.start(it)
+            coreStarted = true
+        } ?: Log.w(TAG, "No config JSON available in onCreate()")
         notifyStatus("stopped")
     }
     
@@ -73,6 +92,14 @@ class VlfVpnService : VpnService() {
             else -> {
                 configYaml = intent?.getStringExtra("configYaml")
                 workMode = intent?.getStringExtra("mode") ?: "tun"
+                currentConfigJson = intent?.getStringExtra("configJson") ?: currentConfigJson ?: getLatestConfig()
+                currentConfigJson?.let {
+                    Log.i(TAG, "Starting with config JSON length=${it.length}")
+                    if (!coreStarted) {
+                        coreEngine.start(it)
+                        coreStarted = true
+                    }
+                } ?: Log.w(TAG, "Starting without config JSON - placeholder engine")
                 
                 Log.i(TAG, "Starting VPN - mode: $workMode, configYaml length: ${configYaml?.length ?: 0}")
                 
@@ -195,6 +222,11 @@ class VlfVpnService : VpnService() {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (e: Exception) {
             // Может быть уже удалено
+        }
+
+        if (coreStarted) {
+            coreEngine.stop()
+            coreStarted = false
         }
         
         // Уведомляем о завершении

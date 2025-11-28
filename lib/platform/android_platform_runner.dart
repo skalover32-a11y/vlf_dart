@@ -1,8 +1,15 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math' as math;
+
 import 'package:flutter/services.dart';
+import 'package:path/path.dart' as p;
 import 'package:vlf_core/vlf_core.dart';
 import 'package:vlf_core/src/vlf_models.dart' as vm show VlfOutbound, VlfRouteConfig, VlfRuntimeConfig, VlfWorkMode;
 import 'package:vlf_core/src/clash_builder.dart';
+import 'package:vlf_core/src/singbox_config.dart';
+
+import '../core/singbox_binary.dart';
 import 'platform_runner.dart';
 
 /// Android заглушка: не запускает бинарники, общается через MethodChannel
@@ -26,11 +33,40 @@ class AndroidPlatformRunner implements PlatformRunner {
 
   @override
   Future<void> start(PlatformConfig config) async {
+    final runtime = _buildRuntimeConfig(config);
+    final singboxJson = SingboxConfigBuilder(runtime).toJsonString();
+    final previewLen = math.min(160, singboxJson.length);
+    final preview = singboxJson.substring(0, previewLen);
+    _logger.append('Android sing-box JSON prepared (${singboxJson.length} chars): $preview${singboxJson.length > previewLen ? '…' : ''}\n');
+
+    // Persist JSON config for future sing-box runs (and inspection)
+    final singboxConfigPath = p.join(config.baseDir.path, 'config_singbox.json');
+    await File(singboxConfigPath).writeAsString(singboxJson, flush: true);
+    _logger.append('Sing-box config saved to $singboxConfigPath\n');
+
+    String? singboxBinaryPath;
+    if (Platform.isAndroid) {
+      final binHelper = SingboxBinary(baseDir: config.baseDir, logger: _logger);
+      singboxBinaryPath = await binHelper.ensureSingboxBinary();
+      _logger.append('Sing-box binary ready: $singboxBinaryPath\n');
+      await _channel.invokeMethod('startSingboxCore', {
+        'binaryPath': singboxBinaryPath,
+        'configPath': singboxConfigPath,
+      });
+      _logger.append('startSingboxCore invoked\n');
+    }
+
+    await _channel.invokeMethod('prepareConfig', singboxJson);
+    _logger.append('Android prepareConfig() acknowledged\n');
+
+    final yamlForDebug = await _buildYaml(runtime);
     final args = <String, dynamic>{
       'mode': config.workMode == VlfWorkMode.proxy ? 'proxy' : 'tun',
-      'configYaml': await _buildYaml(config),
+      'configYaml': yamlForDebug,
       'debugPaths': {
         'baseDir': config.baseDir.path,
+        'singboxBinary': singboxBinaryPath,
+        'singboxConfig': singboxConfigPath,
       },
     };
     _logger.append('AndroidPlatformRunner.startTunnel() called with mode=${config.workMode.displayName}\n');
@@ -56,7 +92,7 @@ class AndroidPlatformRunner implements PlatformRunner {
     _logger.append('Android engine start invoked\n');
   }
 
-  Future<String> _buildYaml(PlatformConfig config) async {
+  vm.VlfRuntimeConfig _buildRuntimeConfig(PlatformConfig config) {
     final outbound = _outboundFromVless(config.profileUrl);
     final routes = vm.VlfRouteConfig(
       ruMode: config.ruMode,
@@ -64,7 +100,10 @@ class AndroidPlatformRunner implements PlatformRunner {
       appExclusions: config.appExclusions,
     );
     final mode = config.workMode == VlfWorkMode.proxy ? vm.VlfWorkMode.proxy : vm.VlfWorkMode.tun;
-    final runtime = vm.VlfRuntimeConfig(outbound: outbound, mode: mode, routes: routes);
+    return vm.VlfRuntimeConfig(outbound: outbound, mode: mode, routes: routes);
+  }
+
+  Future<String> _buildYaml(vm.VlfRuntimeConfig runtime) async {
     return ClashConfigBuilder(runtime).buildYaml();
   }
 
@@ -94,6 +133,14 @@ class AndroidPlatformRunner implements PlatformRunner {
   @override
   Future<void> stop() async {
     _logger.append('AndroidPlatformRunner.stopTunnel() called\n');
+    if (Platform.isAndroid) {
+      try {
+        await _channel.invokeMethod('stopSingboxCore');
+        _logger.append('stopSingboxCore invoked\n');
+      } catch (e) {
+        _logger.append('⚠️ stopSingboxCore failed: $e\n');
+      }
+    }
     await _channel.invokeMethod('stopTunnel');
     _running = false;
   }

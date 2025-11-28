@@ -41,5 +41,9 @@ class SingboxConfigBuilder {
     };
   }
 
-  String toJson() => jsonEncode(toMap());
+  /// Сериализует конфиг в JSON-строку (мин. окружение для передачи на платформу).
+  String toJsonString() => jsonEncode(toMap());
+
+  /// Совместимость со старыми вызовами.
+  String toJson() => toJsonString();
 }

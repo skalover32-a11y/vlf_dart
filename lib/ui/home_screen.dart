@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:vlf_core/vlf_core.dart' show VlfWorkMode, VlfWorkModeExtension, decodeQrFromImage;
 
 import '../core/vlf_core.dart';
+import '../platform/tray/desktop_plugins.dart';
 import 'app_dialogs.dart';
 import 'exclusions_manager.dart';
 import 'logs_screen.dart';
@@ -28,7 +29,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WindowListener {
   bool _isAddMenuOpen = false;
   bool _isMainMenuOpen = false;
   bool _isBusy = false;
@@ -36,10 +37,63 @@ class _HomeScreenState extends State<HomeScreen> {
   VlfCore get core => widget.core;
 
   @override
+  void initState() {
+    super.initState();
+    if (Platform.isWindows) {
+      windowManager.addListener(this);
+    }
+  }
+
+  @override
   void dispose() {
+    if (Platform.isWindows) {
+      windowManager.removeListener(this);
+    }
     // Best-effort cleanup; ignore errors because app might be closing fast
     core.dispose();
     super.dispose();
+  }
+
+  @override
+  Future<void> onWindowClose() async {
+    if (!Platform.isWindows) {
+      await windowManager.destroy();
+      return;
+    }
+
+    // Show dialog: minimize to tray or exit
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => appDialogWrapper(
+        buildAppAlert(
+          title: const Text('Закрыть приложение?', style: TextStyle(color: Colors.white)),
+          content: const Text(
+            'Выберите действие при закрытии окна:',
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Свернуть в трей'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red.shade700,
+              ),
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Выйти'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (shouldExit == true) {
+      await windowManager.destroy();
+    } else {
+      // Minimize to tray
+      await windowManager.hide();
+    }
   }
 
   void onMenuTap() {

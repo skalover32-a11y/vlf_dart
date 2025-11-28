@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:vlf_core/vlf_core.dart';
+import 'package:vlf_core/src/vlf_models.dart' as vm show VlfOutbound, VlfRouteConfig, VlfRuntimeConfig, VlfWorkMode;
+import 'package:vlf_core/src/clash_builder.dart';
 import 'platform_runner.dart';
 
 /// Windows implementation using mihomo.exe subprocess
@@ -62,22 +64,16 @@ class WindowsPlatformRunner implements PlatformRunner {
       'ruRules=${routingPlan.ruCount}\n',
     );
 
-    // Generate config based on work mode
-    final yamlContent = config.workMode == VlfWorkMode.proxy
-        ? await buildClashConfigProxy(
-            vless,
-            config.ruMode,
-            config.siteExclusions,
-            config.appExclusions,
-            routingPlan: routingPlan,
-          )
-        : await buildClashConfig(
-            vless,
-            config.ruMode,
-            config.siteExclusions,
-            config.appExclusions,
-            routingPlan: routingPlan,
-          );
+    // Build runtime via vlf_core models and ClashConfigBuilder
+    final outbound = _outboundFromVless(vless);
+    final routes = vm.VlfRouteConfig(
+      ruMode: config.ruMode,
+      domainExclusions: config.siteExclusions,
+      appExclusions: config.appExclusions,
+    );
+    final mode = config.workMode == VlfWorkMode.proxy ? vm.VlfWorkMode.proxy : vm.VlfWorkMode.tun;
+    final runtime = vm.VlfRuntimeConfig(outbound: outbound, mode: mode, routes: routes);
+    final yamlContent = await ClashConfigBuilder(runtime).buildYaml();
 
     await cfgPath.writeAsString(yamlContent, flush: true);
     _logger.append('config.yaml сгенерирован\n');
@@ -236,6 +232,29 @@ class WindowsPlatformRunner implements PlatformRunner {
         _logger.append('✅ Clash Meta успешно запущен!\n');
       }
     }));
+  }
+
+  vm.VlfOutbound _outboundFromVless(String vlessUrl) {
+    try {
+      final uri = Uri.parse(vlessUrl);
+      final auth = uri.userInfo;
+      final host = uri.host;
+      final port = uri.port == 0 ? 443 : uri.port;
+      String? qp(String k) => uri.queryParameters[k];
+      return vm.VlfOutbound(
+        server: host,
+        port: port,
+        uuid: auth,
+        flow: qp('flow'),
+        security: qp('security'),
+        fingerprint: qp('fp'),
+        publicKey: qp('pbk'),
+        shortId: qp('sid'),
+        sni: qp('sni'),
+      );
+    } catch (_) {
+      return const vm.VlfOutbound(server: 'unknown', port: 443, uuid: '');
+    }
   }
 
   @override

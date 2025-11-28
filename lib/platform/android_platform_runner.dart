@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/services.dart';
 import 'package:vlf_core/vlf_core.dart';
+import 'package:vlf_core/src/vlf_models.dart' as vm show VlfOutbound, VlfRouteConfig, VlfRuntimeConfig, VlfWorkMode;
+import 'package:vlf_core/src/clash_builder.dart';
 import 'platform_runner.dart';
 
 /// Android заглушка: не запускает бинарники, общается через MethodChannel
@@ -55,26 +57,38 @@ class AndroidPlatformRunner implements PlatformRunner {
   }
 
   Future<String> _buildYaml(PlatformConfig config) async {
-    final routingPlan = buildRoutingRulesPlan(
+    final outbound = _outboundFromVless(config.profileUrl);
+    final routes = vm.VlfRouteConfig(
       ruMode: config.ruMode,
-      siteExcl: config.siteExclusions,
-      appExcl: config.appExclusions,
+      domainExclusions: config.siteExclusions,
+      appExclusions: config.appExclusions,
     );
-    return config.workMode == VlfWorkMode.proxy
-        ? await buildClashConfigProxy(
-            config.profileUrl,
-            config.ruMode,
-            config.siteExclusions,
-            config.appExclusions,
-            routingPlan: routingPlan,
-          )
-        : await buildClashConfig(
-            config.profileUrl,
-            config.ruMode,
-            config.siteExclusions,
-            config.appExclusions,
-            routingPlan: routingPlan,
-          );
+    final mode = config.workMode == VlfWorkMode.proxy ? vm.VlfWorkMode.proxy : vm.VlfWorkMode.tun;
+    final runtime = vm.VlfRuntimeConfig(outbound: outbound, mode: mode, routes: routes);
+    return ClashConfigBuilder(runtime).buildYaml();
+  }
+
+  vm.VlfOutbound _outboundFromVless(String vlessUrl) {
+    try {
+      final uri = Uri.parse(vlessUrl);
+      final auth = uri.userInfo;
+      final host = uri.host;
+      final port = uri.port == 0 ? 443 : uri.port;
+      String? qp(String k) => uri.queryParameters[k];
+      return vm.VlfOutbound(
+        server: host,
+        port: port,
+        uuid: auth,
+        flow: qp('flow'),
+        security: qp('security'),
+        fingerprint: qp('fp'),
+        publicKey: qp('pbk'),
+        shortId: qp('sid'),
+        sni: qp('sni'),
+      );
+    } catch (_) {
+      return const vm.VlfOutbound(server: 'unknown', port: 443, uuid: '');
+    }
   }
 
   @override

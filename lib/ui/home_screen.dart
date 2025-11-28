@@ -41,6 +41,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
     super.initState();
     if (Platform.isWindows) {
       windowManager.addListener(this);
+      windowManager.setPreventClose(true);
     }
   }
 
@@ -61,9 +62,10 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
       return;
     }
 
-    // Show dialog: minimize to tray or exit
+    // Prevent default close behavior - we'll handle it manually
     final shouldExit = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => appDialogWrapper(
         buildAppAlert(
           title: const Text('Закрыть приложение?', style: TextStyle(color: Colors.white)),
@@ -91,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> with WindowListener {
     if (shouldExit == true) {
       await windowManager.destroy();
     } else {
-      // Minimize to tray
+      // Just hide to tray, don't close
       await windowManager.hide();
     }
   }

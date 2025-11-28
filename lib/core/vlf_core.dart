@@ -4,6 +4,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:vlf_core/vlf_core.dart';
+import 'package:vlf_core/src/vlf_models.dart' as vm show VlfOutbound, VlfRouteConfig, VlfRuntimeConfig, VlfWorkMode;
+import 'package:vlf_core/src/clash_builder.dart';
 
 import '../clash_manager.dart';
 import 'system_proxy.dart';
@@ -455,7 +457,7 @@ class VlfCore {
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        'Start-Process -FilePath "' + exePath.replaceAll('"', '""') + '" -ArgumentList "' + args.join(' ') + '" -Verb RunAs'
+        'Start-Process -FilePath "${exePath.replaceAll('"', '""')}" -ArgumentList "${args.join(' ')}" -Verb RunAs'
       ];
       await Process.start('powershell', ps);
       // Exit current process to allow elevated instance to take over
@@ -627,28 +629,18 @@ class VlfCore {
   }
 
   Future<void> _generateConfigFiles({required Profile profile}) async {
-    final routingPlan = buildRoutingRulesPlan(
+    // Build runtime config and generate YAML via ClashConfigBuilder
+    // Build runtime config via vlf_core models and ClashConfigBuilder
+    final outbound = _outboundFromVless(profile.url);
+    final routes = vm.VlfRouteConfig(
       ruMode: ruMode,
-      siteExcl: exclusions.siteExclusions,
-      appExcl: exclusions.appExclusions,
+      domainExclusions: exclusions.siteExclusions,
+      appExclusions: exclusions.appExclusions,
     );
-
-    // Generate config based on current work mode
-    final configYaml = workMode.value == VlfWorkMode.proxy
-        ? await buildClashConfigProxy(
-            profile.url,
-            ruMode,
-            exclusions.siteExclusions,
-            exclusions.appExclusions,
-            routingPlan: routingPlan,
-          )
-        : await buildClashConfig(
-            profile.url,
-            ruMode,
-            exclusions.siteExclusions,
-            exclusions.appExclusions,
-            routingPlan: routingPlan,
-          );
+    final mappedMode = workMode.value == VlfWorkMode.proxy ? vm.VlfWorkMode.proxy : vm.VlfWorkMode.tun;
+    final runtime = vm.VlfRuntimeConfig(outbound: outbound, mode: mappedMode, routes: routes);
+    final builder = ClashConfigBuilder(runtime);
+    final configYaml = await builder.buildYaml();
 
     final configPath = await VlfPaths.getConfigPath();
     final cfgPath = File(configPath);
@@ -660,6 +652,31 @@ class VlfCore {
       await debugPath.writeAsString(configYaml, flush: true);
     } catch (e) {
       logger.append('Не удалось записать config_debug.yaml: $e\n');
+    }
+  }
+
+  // Parse minimal fields from vless URL to VlfOutbound
+  vm.VlfOutbound _outboundFromVless(String vlessUrl) {
+    try {
+      final uri = Uri.parse(vlessUrl.replaceFirst('vless://', 'vless://'));
+      final auth = uri.userInfo; // uuid
+      final host = uri.host;
+      final port = uri.port == 0 ? 443 : uri.port;
+      String? qp(String k) => uri.queryParameters[k];
+      return vm.VlfOutbound(
+        server: host,
+        port: port,
+        uuid: auth,
+        flow: qp('flow'),
+        security: qp('security'),
+        fingerprint: qp('fp'),
+        publicKey: qp('pbk'),
+        shortId: qp('sid'),
+        sni: qp('sni'),
+      );
+    } catch (_) {
+      // Fallback: minimal outbound, server from address field if available
+      return const vm.VlfOutbound(server: 'unknown', port: 443, uuid: '');
     }
   }
 

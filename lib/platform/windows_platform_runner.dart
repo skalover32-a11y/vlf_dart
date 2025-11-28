@@ -110,6 +110,10 @@ class WindowsPlatformRunner implements PlatformRunner {
     );
 
     _logger.append('Запускаю Clash Meta (mihomo)...\n');
+    
+    // Emit "running" status immediately after process starts
+    // UI will respond faster, detailed startup validation happens in background
+    _statusCtl.add('running');
 
     // 5. Listen to stdout and stderr
     final stdoutDone = Completer<void>();
@@ -204,31 +208,34 @@ class WindowsPlatformRunner implements PlatformRunner {
       }),
     );
 
-    // 7. Wait for startup confirmation
+    // 7. Wait for startup confirmation in background (non-blocking for UI)
     final timeout = Duration(seconds: config.workMode == VlfWorkMode.proxy ? 5 : 12);
-    bool started = false;
+    
+    // Don't block start() completion - validate in background
+    unawaited(Future(() async {
+      bool started = false;
+      try {
+        started = await startupCompleter.future.timeout(
+          timeout,
+          onTimeout: () {
+            if (!hasSeenOutput) {
+              return false;
+            }
+            return !startupError;
+          },
+        );
+      } catch (_) {
+        started = false;
+      }
 
-    try {
-      started = await startupCompleter.future.timeout(
-        timeout,
-        onTimeout: () {
-          if (!hasSeenOutput) {
-            return false;
-          }
-          return !startupError;
-        },
-      );
-    } catch (_) {
-      started = false;
-    }
-
-    if (!started) {
-      await stop();
-      throw Exception('Clash не запустился в течение $timeout');
-    }
-
-    _logger.append('Clash Meta успешно запущен!\n');
-    _statusCtl.add('running');
+      if (!started) {
+        _logger.append('⚠️ Clash не подтвердил запуск в течение $timeout. Проверьте логи.\n');
+        _statusCtl.add('error:Clash startup timeout');
+        await stop();
+      } else {
+        _logger.append('✅ Clash Meta успешно запущен!\n');
+      }
+    }));
   }
 
   @override

@@ -67,7 +67,7 @@ class ClashManager {
 
     try {
       await _runner.start(config);
-      isRunningNotifier.value = true;
+      // Status is now set via statusStream listener, no manual update needed
     } catch (e) {
       isRunningNotifier.value = false;
       rethrow;

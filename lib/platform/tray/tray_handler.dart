@@ -95,16 +95,13 @@ class TrayHandler with WindowListener, TrayListener {
       return;
     }
 
+    // Do not auto-hide here. Let UI (HomeScreen) decide via dialog.
+    // Keeping this listener minimal avoids double-handling close events.
     try {
-      final prevent = await windowManager.isPreventClose();
-      if (prevent) {
-        await windowManager.hide();
-        await windowManager.setSkipTaskbar(true);
-      }
+      final _ = await windowManager.isPreventClose();
+      // No action; HomeScreen.onWindowClose will perform hide/destroy.
     } catch (_) {
-      try {
-        await windowManager.hide();
-      } catch (_) {}
+      // Swallow errors; defer to UI handler.
     }
   }
 

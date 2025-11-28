@@ -6,15 +6,11 @@ import 'desktop_plugins.dart';
 class EarlySystemTray with WindowListener, TrayListener {
   @override
   void onWindowClose() async {
+    // Do not auto-hide on close at early stage.
+    // Allow the main UI (HomeScreen) to show a confirmation dialog.
     try {
-      final prevent = await windowManager.isPreventClose();
-      if (prevent) {
-        await windowManager.hide();
-        await windowManager.setSkipTaskbar(true);
-      }
-    } catch (_) {
-      await windowManager.hide();
-    }
+      await windowManager.isPreventClose();
+    } catch (_) {}
   }
 
   // Basic tray icon so user can restore the window even before core is ready.

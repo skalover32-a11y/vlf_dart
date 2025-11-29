@@ -1,26 +1,26 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/services.dart';
-import 'package:path/path.dart' as p;
 import 'package:vlf_core/vlf_core.dart';
 import 'package:vlf_core/src/vlf_models.dart' as vm show VlfOutbound, VlfRouteConfig, VlfRuntimeConfig, VlfWorkMode;
 import 'package:vlf_core/src/clash_builder.dart';
 import 'package:vlf_core/src/singbox_config.dart';
+import 'package:vlf_core/src/vlf_paths.dart';
 
-import '../core/singbox_binary.dart';
 import 'platform_runner.dart';
 
 /// Android заглушка: не запускает бинарники, общается через MethodChannel
 class AndroidPlatformRunner implements PlatformRunner {
   static const MethodChannel _channel = MethodChannel('vlf_android_engine');
   static const EventChannel _statusChannel = EventChannel('vlf_android_engine/status');
+  static const EventChannel _logChannel = EventChannel('vlf_android_engine/logs');
 
   final Logger _logger = Logger();
   bool _running = false;
   final StreamController<String> _statusCtl = StreamController<String>.broadcast();
   StreamSubscription? _statusSub;
+  StreamSubscription? _logSub;
 
   @override
   Stream<String> get logStream => _logger.stream;
@@ -34,38 +34,28 @@ class AndroidPlatformRunner implements PlatformRunner {
   @override
   Future<void> start(PlatformConfig config) async {
     final runtime = _buildRuntimeConfig(config);
-    final singboxJson = SingboxConfigBuilder(runtime).toJsonString();
+    final singboxBuilder = SingboxConfigBuilder(runtime);
+    final singboxJson = singboxBuilder.toJsonString();
     final previewLen = math.min(160, singboxJson.length);
     final preview = singboxJson.substring(0, previewLen);
     _logger.append('Android sing-box JSON prepared (${singboxJson.length} chars): $preview${singboxJson.length > previewLen ? '…' : ''}\n');
 
-    // Persist JSON config for future sing-box runs (and inspection)
-    final singboxConfigPath = p.join(config.baseDir.path, 'config_singbox.json');
-    await File(singboxConfigPath).writeAsString(singboxJson, flush: true);
-    _logger.append('Sing-box config saved to $singboxConfigPath\n');
-
-    String? singboxBinaryPath;
-    if (Platform.isAndroid) {
-      final binHelper = SingboxBinary(baseDir: config.baseDir, logger: _logger);
-      singboxBinaryPath = await binHelper.ensureSingboxBinary();
-      _logger.append('Sing-box binary ready: $singboxBinaryPath\n');
-      await _channel.invokeMethod('startSingboxCore', {
-        'binaryPath': singboxBinaryPath,
-        'configPath': singboxConfigPath,
-      });
-      _logger.append('startSingboxCore invoked\n');
-    }
+    // Persist JSON config to unified path (Android requires /data/user/0/.../files/vlf_data)
+    final singboxConfigPath = await singboxBuilder.saveToDefaultLocation(
+      logger: _logger,
+      jsonOverride: singboxJson,
+    );
 
     await _channel.invokeMethod('prepareConfig', singboxJson);
     _logger.append('Android prepareConfig() acknowledged\n');
 
     final yamlForDebug = await _buildYaml(runtime);
+    final basePath = await VlfPaths.getBasePath();
     final args = <String, dynamic>{
       'mode': config.workMode == VlfWorkMode.proxy ? 'proxy' : 'tun',
       'configYaml': yamlForDebug,
       'debugPaths': {
-        'baseDir': config.baseDir.path,
-        'singboxBinary': singboxBinaryPath,
+        'baseDir': basePath,
         'singboxConfig': singboxConfigPath,
       },
     };
@@ -86,6 +76,15 @@ class AndroidPlatformRunner implements PlatformRunner {
       _logger.append('Android status error: $e\n');
       _statusCtl.add('error:$e');
       _running = false;
+    });
+    _logSub ??= _logChannel.receiveBroadcastStream().listen((event) {
+      final line = (event ?? '').toString();
+      if (line.isEmpty) {
+        return;
+      }
+      _logger.append('VLF-SINGBOX: $line\n');
+    }, onError: (e) {
+      _logger.append('Android log stream error: $e\n');
     });
     await _channel.invokeMethod('startTunnel', args);
     _running = true;
@@ -133,14 +132,6 @@ class AndroidPlatformRunner implements PlatformRunner {
   @override
   Future<void> stop() async {
     _logger.append('AndroidPlatformRunner.stopTunnel() called\n');
-    if (Platform.isAndroid) {
-      try {
-        await _channel.invokeMethod('stopSingboxCore');
-        _logger.append('stopSingboxCore invoked\n');
-      } catch (e) {
-        _logger.append('⚠️ stopSingboxCore failed: $e\n');
-      }
-    }
     await _channel.invokeMethod('stopTunnel');
     _running = false;
   }
@@ -159,7 +150,12 @@ class AndroidPlatformRunner implements PlatformRunner {
   }
 
   @override
-  Future<void> dispose() async {}
+  Future<void> dispose() async {
+    await _statusSub?.cancel();
+    _statusSub = null;
+    await _logSub?.cancel();
+    _logSub = null;
+  }
 
   Future<String> getStatus() async {
     final status = await _channel.invokeMethod<String>('getStatus');

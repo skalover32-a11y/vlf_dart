@@ -1,44 +1,104 @@
 import 'dart:io';
+
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
 /// Centralized path management for VLF configuration files
 class VlfPaths {
-  /// Base directory for VLF application data
-  static Future<Directory> getVlfDirectory() async {
-    final Directory appSupportDir;
-    
-    if (Platform.isAndroid || Platform.isIOS) {
-      // Mobile: use getApplicationSupportDirectory()
-      appSupportDir = await getApplicationSupportDirectory();
-    } else {
-      // Desktop: use current directory (legacy compatibility)
-      appSupportDir = Directory.current;
-    }
-    
-    final vlfDir = Directory(p.join(appSupportDir.path, 'vlf_tunnel'));
-    if (!vlfDir.existsSync()) {
-      vlfDir.createSync(recursive: true);
-    }
-    
-    return vlfDir;
+  /// Base directory (application support directory on every platform)
+  static Future<Directory> getBaseDir() async {
+    return _resolveBaseDirectory();
   }
-  
-  /// Get path to main config.yaml file
+
+  /// Core directory that hosts configs/binaries (…/vlf_tunnel)
+  static Future<Directory> getCoreDir() async {
+    final base = await _resolveBaseDirectory();
+    final core = Directory(p.join(base.path, 'vlf_tunnel'));
+    await _ensureDirectory(core);
+    _logSuspiciousPath('coreDir', core.path);
+    return core;
+  }
+
+  /// Explicit helper for callers that want tightened validation
+  static Future<Directory> getSafeCoreDir() => getCoreDir();
+
+  /// Backward-compatible alias for legacy code
+  static Future<Directory> getVlfDirectory() => getCoreDir();
+
+  /// Path to primary config.yaml
   static Future<String> getConfigPath() async {
-    final dir = await getVlfDirectory();
-    return p.join(dir.path, 'config.yaml');
+    final dir = await getCoreDir();
+    final path = p.join(dir.path, 'config.yaml');
+    _logSuspiciousPath('configYaml', path);
+    return path;
   }
-  
-  /// Get path to debug config_debug.yaml file
+
+  /// Path to config_debug.yaml
   static Future<String> getDebugConfigPath() async {
-    final dir = await getVlfDirectory();
-    return p.join(dir.path, 'config_debug.yaml');
+    final dir = await getCoreDir();
+    final path = p.join(dir.path, 'config_debug.yaml');
+    _logSuspiciousPath('configDebug', path);
+    return path;
   }
-  
-  /// Get base directory path (for legacy compatibility)
+
+  /// Sing-box JSON config path
+  static Future<String> getSingboxConfigPath() async {
+    final dir = await getCoreDir();
+    final path = p.join(dir.path, 'config_singbox.json');
+    _logSuspiciousPath('singboxConfig', path);
+    return path;
+  }
+
+  /// Get base directory path (legacy string helper)
   static Future<String> getBasePath() async {
-    final dir = await getVlfDirectory();
+    final dir = await getCoreDir();
     return dir.path;
+  }
+
+  static void _logSuspiciousPath(String label, String path) {
+    if ((Platform.isAndroid || Platform.isIOS) && path.startsWith('/') && !path.contains('com.')) {
+      stderr.writeln('VlfPaths warning: $label path looks suspicious: $path');
+    }
+  }
+
+  static Future<Directory> _resolveBaseDirectory() async {
+    Directory? candidate;
+    dynamic lastError;
+    for (final resolver in [
+      getApplicationSupportDirectory,
+      getApplicationDocumentsDirectory,
+      getTemporaryDirectory,
+    ]) {
+      try {
+        candidate = await resolver();
+        break;
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    candidate ??= Directory.current;
+    if (_isInvalidPath(candidate.path)) {
+      stderr.writeln('VlfPaths warning: baseDir resolved to "${candidate.path}" (lastError=$lastError)');
+      if (Platform.isAndroid) {
+        final pkg = Platform.environment['ANDROID_APP_PACKAGE'] ?? 'com.example.vlf_dart';
+        candidate = Directory('/data/user/0/$pkg/files');
+      } else {
+        candidate = Directory.systemTemp;
+      }
+    }
+    await _ensureDirectory(candidate);
+    return candidate;
+  }
+
+  static bool _isInvalidPath(String path) {
+    if (path.isEmpty) return true;
+    final normalized = path.replaceAll('\\', '/');
+    return normalized == '/' || normalized == '.';
+  }
+
+  static Future<void> _ensureDirectory(Directory dir) async {
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
   }
 }

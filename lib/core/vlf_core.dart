@@ -9,6 +9,7 @@ import 'package:vlf_core/src/clash_builder.dart';
 
 import '../clash_manager.dart';
 import 'system_proxy.dart';
+import 'package:vlf_core/src/vlf_paths.dart';
 
 /// Фасад, объединяющий core-модули для UI.
 
@@ -44,7 +45,14 @@ class VlfCore {
   /// Инициализация фасада. `baseDir` — директория рядом с которой лежат
   /// `vlf_gui_config.json`, `profiles.json` и `sing-box.exe`.
   static Future<VlfCore> init({required String baseDir}) async {
-    final dir = Directory(baseDir);
+    Directory dir = Directory(baseDir);
+    if (_isInvalidBaseDir(dir.path)) {
+      stderr.writeln('VlfCore.init: baseDir "$baseDir" invalid, resolving via VlfPaths');
+      dir = await VlfPaths.getSafeCoreDir();
+    }
+    if (!await dir.exists()) {
+      await dir.create(recursive: true);
+    }
     final store = ConfigStore(dir);
 
     final guiCfg = store.loadGuiConfig();
@@ -88,6 +96,12 @@ class VlfCore {
     }
 
     return core;
+  }
+
+  static bool _isInvalidBaseDir(String path) {
+    if (path.isEmpty) return true;
+    final normalized = path.replaceAll('\\', '/');
+    return normalized == '/' || normalized == '.';
   }
 
   // --- Config / Profiles helpers ---

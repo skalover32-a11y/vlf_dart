@@ -18,12 +18,13 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
     
     private lateinit var channel: MethodChannel
     private lateinit var statusChannel: EventChannel
+    private lateinit var logChannel: EventChannel
     private var statusSink: EventChannel.EventSink? = null
+    private var logSink: EventChannel.EventSink? = null
     private var context: Context? = null
     private var activity: Activity? = null
     private var pendingResult: MethodChannel.Result? = null
     private var pendingMode: String = "tun"
-    private var pendingConfigYaml: String = ""
     private var latestConfigJson: String? = null
     
     companion object {
@@ -39,27 +40,33 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
 
         statusChannel = EventChannel(binding.binaryMessenger, "vlf_android_engine/status")
         statusChannel.setStreamHandler(this)
+        logChannel = EventChannel(binding.binaryMessenger, "vlf_android_engine/logs")
+        logChannel.setStreamHandler(logStreamHandler)
         
         // Регистрируем callback для получения статусов от VpnService
         VlfVpnService.setStatusCallback { status ->
             Log.d("VLF", "Status from VpnService: $status")
             statusSink?.success(status)
         }
+        VlfVpnService.setLogCallback { line ->
+            logSink?.success(line)
+        }
+    }
+
+    private val logStreamHandler = object : EventChannel.StreamHandler {
+        override fun onListen(arguments: Any?, events: EventChannel.EventSink?) {
+            logSink = events
+            Log.d("VLF", "Log listener attached")
+        }
+
+        override fun onCancel(arguments: Any?) {
+            logSink = null
+            Log.d("VLF", "Log listener cancelled")
+        }
     }
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
-            "startSingboxCore" -> {
-                val args = call.arguments as? Map<*, *> ?: emptyMap<String, Any>()
-                val binaryPath = args["binaryPath"] as? String ?: ""
-                val configPath = args["configPath"] as? String ?: ""
-                Log.i("VLF", "startSingboxCore bin=$binaryPath config=$configPath")
-                result.success("ok")
-            }
-            "stopSingboxCore" -> {
-                Log.i("VLF", "stopSingboxCore requested")
-                result.success("ok")
-            }
             "prepareConfig" -> {
                 val json = call.arguments as? String
                 if (json.isNullOrEmpty()) {
@@ -75,10 +82,9 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
             "startTunnel" -> {
                 val args = call.arguments as? Map<*, *> ?: emptyMap<String, Any>()
                 val mode = args["mode"] as? String ?: "tun"
-                val cfg = args["configYaml"] as? String ?: ""
                 pendingMode = mode
-                pendingConfigYaml = cfg
-                Log.i("VLF", "AndroidEngine.startTunnel mode=$mode, configYaml.length=${cfg.length}")
+                val cfgLen = (args["configYaml"] as? String)?.length ?: 0
+                Log.i("VLF", "AndroidEngine.startTunnel mode=$mode, configYaml.length=$cfgLen")
                 
                 try {
                     // Проверяем, запущен ли уже VPN
@@ -102,7 +108,7 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
                     } else {
                         Log.i("VLF", "VPN permission already granted - starting service")
                         // Разрешение уже есть, запускаем сервис
-                        startVpnService(mode, cfg)
+                        startVpnService(mode)
                         result.success("ok")
                     }
                 } catch (t: Throwable) {
@@ -132,6 +138,7 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
         Log.i("VLF", "VlfAndroidEngine detached")
         VlfVpnService.clearStatusCallback()
+        VlfVpnService.clearLogCallback()
         context = null
     }
 
@@ -178,7 +185,7 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
                 // Пользователь дал разрешение, запускаем сервис
                 // Нужно получить параметры из pendingResult
                 try {
-                    startVpnService(pendingMode, pendingConfigYaml)
+                    startVpnService(pendingMode)
                     pendingResult?.success("ok")
                 } catch (t: Throwable) {
                     Log.e("VLF", "Error starting VPN after permission granted", t)
@@ -197,12 +204,11 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
         return false
     }
     
-    private fun startVpnService(mode: String, configYaml: String) {
+    private fun startVpnService(mode: String) {
         val ctx = context ?: throw IllegalStateException("Context is null")
         
         val intent = Intent(ctx, VlfVpnService::class.java).apply {
             putExtra("mode", mode)
-            putExtra("configYaml", configYaml)
             latestConfigJson?.let { putExtra("configJson", it) }
         }
         

@@ -3,10 +3,8 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
-typedef _CommandRunner = Future<ProcessResult> Function(
-  String executable,
-  List<String> arguments,
-);
+typedef _CommandRunner =
+    Future<ProcessResult> Function(String executable, List<String> arguments);
 
 class _PlatformProbe {
   final bool isWindows;
@@ -14,9 +12,9 @@ class _PlatformProbe {
   final bool isLinux;
 
   _PlatformProbe()
-      : isWindows = Platform.isWindows,
-        isMacOs = Platform.isMacOS,
-        isLinux = Platform.isLinux;
+    : isWindows = Platform.isWindows,
+      isMacOs = Platform.isMacOS,
+      isLinux = Platform.isLinux;
 
   _PlatformProbe.custom({
     required this.isWindows,
@@ -37,7 +35,7 @@ class SystemProxy {
       return _stateFileOverride!;
     }
     final sep = Platform.pathSeparator;
-    return File('${Directory.current.path}${sep}.system_proxy_state');
+    return File('${Directory.current.path}$sep.system_proxy_state');
   }
 
   static Future<void> enableProxy({
@@ -97,7 +95,7 @@ class SystemProxy {
 
   static Future<void> _enableWindows(int httpPort, int socksPort) async {
     const key =
-      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
     await _run('reg', [
       'add',
       key,
@@ -163,7 +161,7 @@ class SystemProxy {
 
   static Future<void> _disableWindows() async {
     const key =
-      r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
+        r'HKCU\Software\Microsoft\Windows\CurrentVersion\Internet Settings';
     await _run('reg', [
       'add',
       key,
@@ -226,7 +224,11 @@ class SystemProxy {
         '127.0.0.1',
         '$socksPort',
       ]);
-      await _runOptional('networksetup', ['-setsocksfirewallproxystate', service, 'on']);
+      await _runOptional('networksetup', [
+        '-setsocksfirewallproxystate',
+        service,
+        'on',
+      ]);
     }
   }
 
@@ -236,7 +238,11 @@ class SystemProxy {
     for (final service in services) {
       await _run('networksetup', ['-setwebproxystate', service, 'off']);
       await _run('networksetup', ['-setsecurewebproxystate', service, 'off']);
-      await _runOptional('networksetup', ['-setsocksfirewallproxystate', service, 'off']);
+      await _runOptional('networksetup', [
+        '-setsocksfirewallproxystate',
+        service,
+        'off',
+      ]);
     }
   }
 
@@ -256,7 +262,12 @@ class SystemProxy {
   }
 
   static Future<void> _enableLinux(int httpPort, int socksPort) async {
-    await _runOptional('gsettings', ['set', 'org.gnome.system.proxy', 'mode', 'manual']);
+    await _runOptional('gsettings', [
+      'set',
+      'org.gnome.system.proxy',
+      'mode',
+      'manual',
+    ]);
     await _runOptional('gsettings', [
       'set',
       'org.gnome.system.proxy.http',
@@ -302,7 +313,12 @@ class SystemProxy {
   }
 
   static Future<void> _disableLinux() async {
-    await _runOptional('gsettings', ['set', 'org.gnome.system.proxy', 'mode', 'none']);
+    await _runOptional('gsettings', [
+      'set',
+      'org.gnome.system.proxy',
+      'mode',
+      'none',
+    ]);
   }
 
   static Future<void> _run(String executable, List<String> args) async {

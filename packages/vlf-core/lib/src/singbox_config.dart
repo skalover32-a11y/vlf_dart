@@ -12,15 +12,41 @@ const _bypassTag = 'bypass';
 const _blockTag = 'block';
 const _dnsDirectTag = 'dns-direct';
 const _dnsLocalTag = 'dns-local';
+const _dnsAndroidGoogleUdpTag = 'dns-google-udp';
+const _dnsAndroidCloudflareUdpTag = 'dns-cloudflare-udp';
 const _tunAddress = '10.0.0.2/30';
 const _tunMtu = 9000;
 const _tunStack = 'gvisor';
-const _primaryDnsUrl = 'https://doh.pub/dns-query';
+const _primaryDnsUrl = 'https://dns.google/dns-query';
+const _androidDnsServers = [
+  {
+    'tag': _dnsAndroidGoogleUdpTag,
+    'address': 'udp://8.8.8.8',
+    'detour': _primaryOutboundTag,
+  },
+  {
+    'tag': _dnsAndroidCloudflareUdpTag,
+    'address': 'udp://1.1.1.1',
+    'detour': _primaryOutboundTag,
+  },
+];
+const _androidFakeIpConfig = {
+  'enabled': true,
+  'inet4_range': '198.18.0.0/15',
+  'inet6_range': 'fc00::/18',
+};
 
 /// Строит полноценный sing-box конфиг для Android TUN режима.
 class SingboxConfigBuilder {
   final VlfRuntimeConfig runtime;
-  const SingboxConfigBuilder(this.runtime);
+  final bool? platformOverrideIsAndroid;
+  const SingboxConfigBuilder(
+    this.runtime, {
+    this.platformOverrideIsAndroid,
+  });
+
+  bool get _isAndroidPlatform =>
+      platformOverrideIsAndroid ?? Platform.isAndroid;
 
   /// Возвращает Map, пригодный для сериализации в JSON.
   Map<String, dynamic> toMap() {
@@ -60,6 +86,15 @@ class SingboxConfigBuilder {
       logger.append(
         'Sing-box config stats: inbounds=$inboundsCount, outbounds=$outboundsCount, rules=$rulesCount\n',
       );
+      logger.append('Sing-box JSON length=${json.length} chars\n');
+      final dnsSection = _buildDnsSection();
+      final dnsServers = (dnsSection['servers'] as List<dynamic>? ?? const [])
+          .map((entry) => Map<String, dynamic>.from(entry as Map))
+          .map((entry) => "${entry['tag']}=>${entry['address']}")
+          .join(', ');
+      if (dnsServers.isNotEmpty) {
+        logger.append('Sing-box DNS servers: $dnsServers\n');
+      }
       logger.append(
         'Sing-box config written to $path (exists=$exists, size=$size байт)\n',
       );
@@ -70,6 +105,22 @@ class SingboxConfigBuilder {
   Map<String, dynamic> _buildLogSection() => const {'level': 'info'};
 
   Map<String, dynamic> _buildDnsSection() {
+    if (_isAndroidPlatform) {
+      return _buildAndroidDnsSection();
+    }
+    return _buildDefaultDnsSection();
+  }
+
+  Map<String, dynamic> _buildAndroidDnsSection() {
+    return {
+      'servers': _androidDnsServers,
+      'strategy': 'prefer_ipv4',
+      'fakeip': _androidFakeIpConfig,
+      'final': _dnsAndroidGoogleUdpTag,
+    };
+  }
+
+  Map<String, dynamic> _buildDefaultDnsSection() {
     final targetDomain = runtime.outbound.server;
     return {
       'independent_cache': true,
@@ -151,9 +202,11 @@ class SingboxConfigBuilder {
   Map<String, dynamic> _buildRouteSection() {
     // TODO: добавить правила для ruMode и пользовательских исключений,
     // когда переедем на rule_set или новые DNS rule'ы.
+    final resolverTag =
+      _isAndroidPlatform ? _dnsAndroidGoogleUdpTag : _dnsDirectTag;
     return {
       'auto_detect_interface': false,
-      'default_domain_resolver': _dnsDirectTag,
+      'default_domain_resolver': resolverTag,
       'rules': [
         {
           'network': 'udp',

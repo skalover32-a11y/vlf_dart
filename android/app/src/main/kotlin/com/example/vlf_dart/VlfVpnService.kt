@@ -37,6 +37,8 @@ class VlfVpnService : VpnService(), PlatformInterfaceWrapper {
         private var logCallback: ((String) -> Unit)? = null
         @Volatile
         private var latestConfigJson: String? = null
+        @Volatile
+        private var latestConfigPath: String? = null
 
         fun setStatusCallback(callback: (String) -> Unit) {
             statusCallback = callback
@@ -72,12 +74,18 @@ class VlfVpnService : VpnService(), PlatformInterfaceWrapper {
 
         fun isRunning(): Boolean = instance != null
 
-        fun updateConfig(json: String) {
+        fun updateConfig(json: String, path: String? = null) {
             latestConfigJson = json
-            Log.i(TAG, "Config JSON updated, length=${json.length}")
+            latestConfigPath = path
+            val preview = json.take(200).replace('\n', ' ')
+            Log.i(
+                TAG,
+                "Config JSON updated, length=${json.length}, path=${path ?: "n/a"}, preview=$preview"
+            )
         }
 
         fun getLatestConfig(): String? = latestConfigJson
+        fun getLatestConfigPath(): String? = latestConfigPath
     }
 
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -86,6 +94,7 @@ class VlfVpnService : VpnService(), PlatformInterfaceWrapper {
     }
 
     private var currentConfigJson: String? = null
+    private var currentConfigPath: String? = null
     private var coreStarted = false
     private var lastEngineError: String? = null
     private var boxService: BoxService? = null
@@ -95,6 +104,7 @@ class VlfVpnService : VpnService(), PlatformInterfaceWrapper {
         super.onCreate()
         instance = this
         currentConfigJson = getLatestConfig()
+        currentConfigPath = getLatestConfigPath()
         notifyStatus("stopped")
     }
 
@@ -107,6 +117,7 @@ class VlfVpnService : VpnService(), PlatformInterfaceWrapper {
             }
             else -> {
                 currentConfigJson = intent?.getStringExtra("configJson") ?: currentConfigJson ?: getLatestConfig()
+                currentConfigPath = intent?.getStringExtra("configPath") ?: currentConfigPath ?: getLatestConfigPath()
                 val configJson = currentConfigJson
                 if (configJson.isNullOrEmpty()) {
                     lastEngineError = "Config JSON missing"
@@ -137,6 +148,9 @@ class VlfVpnService : VpnService(), PlatformInterfaceWrapper {
         executor.execute {
             try {
                 Log.i(TAG, "Initializing libbox core")
+                val resolvedPath = currentConfigPath ?: getLatestConfigPath()
+                Log.i(TAG, "Using sing-box config path=${resolvedPath ?: "inline-json"}")
+                Log.d(TAG, "Config preview: ${configJson.take(200).replace('\n', ' ')}")
                 Libbox.setMemoryLimit(true)
                 val service = Libbox.newService(configJson, this@VlfVpnService)
                 boxService = service

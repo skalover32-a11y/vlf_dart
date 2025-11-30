@@ -26,6 +26,7 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
     private var pendingResult: MethodChannel.Result? = null
     private var pendingMode: String = "tun"
     private var latestConfigJson: String? = null
+    private var latestConfigPath: String? = null
     
     companion object {
         private const val VPN_REQUEST_CODE = 1001
@@ -68,15 +69,31 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
         when (call.method) {
             "prepareConfig" -> {
-                val json = call.arguments as? String
+                val rawArgs = call.arguments
+                val (json, path, preview) = when (rawArgs) {
+                    is String -> Triple(rawArgs, null, null)
+                    is Map<*, *> -> Triple(
+                        rawArgs["json"] as? String,
+                        rawArgs["path"] as? String,
+                        rawArgs["preview"] as? String
+                    )
+                    else -> Triple(null, null, null)
+                }
+
                 if (json.isNullOrEmpty()) {
-                    Log.w("VLF", "prepareConfig called with empty json")
+                    Log.w("VLF", "prepareConfig called with invalid json payload")
                     result.error("invalid_config", "Empty config", null)
                     return
                 }
+
                 latestConfigJson = json
-                VlfVpnService.updateConfig(json)
-                Log.i("VLF", "prepareConfig accepted, json length=${json.length}")
+                latestConfigPath = path
+                VlfVpnService.updateConfig(json, path)
+                val snippet = (preview ?: json.take(200)).replace('\n', ' ')
+                Log.i(
+                    "VLF",
+                    "prepareConfig accepted, json length=${json.length}, path=${path ?: "n/a"}, preview=$snippet"
+                )
                 result.success("ok")
             }
             "startTunnel" -> {
@@ -210,6 +227,7 @@ class VlfAndroidEngine : FlutterPlugin, MethodChannel.MethodCallHandler, EventCh
         val intent = Intent(ctx, VlfVpnService::class.java).apply {
             putExtra("mode", mode)
             latestConfigJson?.let { putExtra("configJson", it) }
+            latestConfigPath?.let { putExtra("configPath", it) }
         }
         
         Log.i("VLF", "Starting VlfVpnService...")

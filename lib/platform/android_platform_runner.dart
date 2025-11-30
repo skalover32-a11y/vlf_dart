@@ -46,7 +46,12 @@ class AndroidPlatformRunner implements PlatformRunner {
       jsonOverride: singboxJson,
     );
 
-    await _channel.invokeMethod('prepareConfig', singboxJson);
+    final preparePayload = {
+      'json': singboxJson,
+      'path': singboxConfigPath,
+      'preview': preview,
+    };
+    await _channel.invokeMethod('prepareConfig', preparePayload);
     _logger.append('Android prepareConfig() acknowledged\n');
 
     final yamlForDebug = await _buildYaml(runtime);

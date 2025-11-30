@@ -12,6 +12,7 @@ import 'package:flutter/foundation.dart';
 import '../subscription_decoder.dart';
 import 'vlf_work_mode.dart';
 import 'system_proxy.dart';
+import '../singbox_config.dart';
 
 /// Фасад, объединяющий core-модули для UI.
 
@@ -395,6 +396,25 @@ class VlfCore {
     final p = profileManager.profiles[profileIdx];
     final mode = workMode.value;
     logger.append('Запуск туннеля в режиме ${mode.displayName}\n');
+
+    if (Platform.isAndroid) {
+      try {
+        final cfgFile = await SingboxConfigBuilder.fromProfile(
+          p,
+          ruMode: ruMode,
+          siteExclusions: List<String>.from(exclusions.siteExclusions),
+          appExclusions: List<String>.from(exclusions.appExclusions),
+          outboundTag: 'proxy',
+        ).saveToDefaultLocation();
+
+        if (cfgFile != null) {
+          logger.append('sing-box config записан: ${cfgFile.path}\n');
+        }
+      } catch (e) {
+        logger.append('Не удалось записать sing-box config: $e\n');
+      }
+    }
+
     await clashManager.start(
       p.url,
       Directory(configStore.baseDir.path),
